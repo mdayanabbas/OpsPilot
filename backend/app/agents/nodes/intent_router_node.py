@@ -89,14 +89,19 @@ Input:
         max_retries=2,
     )
 
+    raw_intent = retry_result["result"] or {}
+
     if retry_result["fallback_used"]:
         intent = retry_result["result"] or _fallback_intent(
             "Gemini intent router unavailable. Falling back to safe clarification mode."
         )
     else:
-        intent = _normalize_intent(retry_result["result"])
+        intent = _normalize_intent(raw_intent)
 
-    intent["attempts"] = retry_result["attempts"]
-    intent["fallback_used"] = retry_result["fallback_used"]
+    intent["attempts"] = raw_intent.get("attempts", retry_result["attempts"])
+    intent["fallback_used"] = raw_intent.get(
+        "fallback_used",
+        retry_result["fallback_used"],
+    )
 
     return intent
