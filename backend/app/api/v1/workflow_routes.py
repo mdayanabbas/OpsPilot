@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.intent_router_node import detect_workflow_intent
 from app.agents.nodes.issue_extraction_node import extract_issues
 from app.agents.nodes.reply_generation_node import generate_customer_reply
@@ -240,6 +241,12 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     first_issue = issues[0]
     generated_ticket = generate_ticket(first_issue)
     reply_result = generate_customer_reply(first_issue)
+    evaluation_result = evaluate_workflow_output(
+        issue=first_issue,
+        ticket=generated_ticket,
+        reply=reply_result,
+        fallback_used=reply_result.get("fallback_used", False),
+    )
 
     ticket_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
@@ -308,13 +315,13 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
 
     evaluation = EvaluationResult(
         workflow_run_id=workflow_run.id,
-        quality_score=0.89,
-        reply_policy_compliance=0.92,
-        ticket_completeness=0.88,
-        unsupported_claim_rate=0.05,
-        tool_recovery_success=1.0,
-        requires_human_review=True,
-        risks="Billing-related customer reply requires human approval.",
+        quality_score=evaluation_result["quality_score"],
+        reply_policy_compliance=evaluation_result["reply_policy_compliance"],
+        ticket_completeness=evaluation_result["ticket_completeness"],
+        unsupported_claim_rate=evaluation_result["unsupported_claim_rate"],
+        tool_recovery_success=evaluation_result["tool_recovery_success"],
+        requires_human_review=evaluation_result["requires_human_review"],
+        risks=evaluation_result["risks"],
     )
 
     db.add_all(starter_tool_calls)
