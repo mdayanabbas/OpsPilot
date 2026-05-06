@@ -5,7 +5,8 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from app.config import GEMINI_API_KEY, GEMINI_MODEL
+from app.config import GEMINI_API_KEY, GEMINI_MODEL, LLM_PROVIDER
+from app.services.local_llm_service import LocalLLMServiceError, generate_json_local
 
 
 class GeminiServiceError(RuntimeError):
@@ -40,21 +41,65 @@ def _extract_json(response: Any) -> dict:
     return data
 
 
+def _generate_json_gemini(prompt: str, response_schema: dict) -> dict:
+    response = get_gemini_client().models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=response_schema,
+        ),
+    )
+    result = _extract_json(response)
+    result.setdefault("attempts", 1)
+    result.setdefault("fallback_used", False)
+    return result
+
+
+def _generate_json_local(prompt: str, response_schema: dict) -> dict:
+    result = generate_json_local(prompt, response_schema)
+    result.setdefault("attempts", 1)
+    result["fallback_used"] = True
+    return result
+
+
 def generate_json(prompt: str, response_schema: dict) -> dict:
     if not prompt.strip():
         raise GeminiServiceError("Prompt cannot be empty")
 
+    provider = LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local", "auto"} else "auto"
+    print(f"[gemini_service] provider={provider}")
+
+    if provider == "local":
+        print("[gemini_service] using local provider")
+        try:
+            return _generate_json_local(prompt, response_schema)
+        except LocalLLMServiceError as exc:
+            raise GeminiServiceError(
+                f"Local provider failed: {type(exc).__name__}: {exc}"
+            ) from exc
+
+    if provider == "gemini":
+        try:
+            return _generate_json_gemini(prompt, response_schema)
+        except Exception as exc:
+            print(f"[gemini_service] error={type(exc).__name__}: {exc}")
+            raise GeminiServiceError(
+                f"Gemini request failed: {type(exc).__name__}: {exc}"
+            ) from exc
+
     try:
-        response = get_gemini_client().models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=response_schema,
-            ),
-        )
+        return _generate_json_gemini(prompt, response_schema)
     except Exception as exc:
         print(f"[gemini_service] error={type(exc).__name__}: {exc}")
-        raise GeminiServiceError(f"Gemini request failed: {type(exc).__name__}: {exc}") from exc
+        gemini_error = exc
 
-    return _extract_json(response)
+    print("[gemini_service] falling back to local provider")
+    try:
+        return _generate_json_local(prompt, response_schema)
+    except LocalLLMServiceError as exc:
+        raise GeminiServiceError(
+            "Gemini request failed and local LLM fallback failed: "
+            f"gemini={type(gemini_error).__name__}: {gemini_error}; "
+            f"local={type(exc).__name__}: {exc}"
+        ) from exc
