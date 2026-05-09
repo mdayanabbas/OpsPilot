@@ -1,0 +1,12 @@
+{
+  "id": "case_008_vague_feedback",
+  "category": "vague_feedback",
+  "input_text": "The app is weird and something feels off. Please fix it.",
+  "expected": {
+    "should_create_ticket": false,
+    "should_create_reply": false,
+    "should_require_human_review": false,
+    "expected_issue_category": null,
+    "expected_status": "needs_clarification"
+  }
+}

@@ -14,10 +14,17 @@ REQUIRED_REPLY_FIELDS = (
 )
 
 SENSITIVE_TERMS = {
+    "account",
     "billing",
+    "data loss",
+    "invoice",
+    "legal",
+    "login",
+    "password",
     "payment",
     "refund",
     "refunds",
+    "security",
 }
 
 RISKY_REPLY_TERMS = {
@@ -90,8 +97,12 @@ def _tool_recovery_success(reply: dict, fallback_used: bool) -> float:
     return 0.7
 
 
-def _requires_human_review(issue: dict, reply: dict) -> bool:
-    text = _combined_text(issue, reply)
+def _requires_human_review(issue: dict, ticket: dict, reply: dict) -> bool:
+    issue_category = issue.get("category") if isinstance(issue, dict) else None
+    if issue_category in {"billing", "auth"}:
+        return True
+
+    text = _combined_text(issue, ticket, reply)
     risk_level = reply.get("risk_level") if isinstance(reply, dict) else None
 
     return (
@@ -122,7 +133,7 @@ def _risk_notes(
         notes.append("Ticket has no acceptance criteria.")
     if fallback_used:
         notes.append("A fallback path was used.")
-    if _requires_human_review(issue, reply):
+    if _requires_human_review(issue, ticket, reply):
         notes.append("Human review required due to sensitive or high-risk content.")
 
     return notes
@@ -178,7 +189,7 @@ def evaluate_workflow_output(
     if fallback_used:
         quality_score -= 0.07
 
-    requires_human_review = _requires_human_review(issue, reply)
+    requires_human_review = _requires_human_review(issue, ticket, reply)
     risks = " ".join(_risk_notes(issue, ticket, reply, fallback_used))
     if not risks:
         risks = "No major risks detected by heuristic evaluator."
