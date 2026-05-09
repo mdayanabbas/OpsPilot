@@ -27,6 +27,60 @@ router = APIRouter()
 LOW_INTENT_CONFIDENCE_THRESHOLD = 0.60
 
 
+@router.get("")
+def list_workflow_runs(db: Session = Depends(get_db)):
+    workflow_runs = (
+        db.query(WorkflowRun)
+        .order_by(WorkflowRun.created_at.desc())
+        .all()
+    )
+
+    results = []
+    for workflow_run in workflow_runs:
+        ticket_count = (
+            db.query(Ticket)
+            .filter(Ticket.workflow_run_id == workflow_run.id)
+            .count()
+        )
+        evaluation = (
+            db.query(EvaluationResult)
+            .filter(EvaluationResult.workflow_run_id == workflow_run.id)
+            .first()
+        )
+        reply_requires_approval = (
+            db.query(CustomerReply)
+            .filter(
+                CustomerReply.workflow_run_id == workflow_run.id,
+                CustomerReply.requires_approval.is_(True),
+            )
+            .first()
+            is not None
+        )
+
+        results.append(
+            {
+                "id": workflow_run.id,
+                "input_text": workflow_run.input_text,
+                "status": workflow_run.status,
+                "workflow_type": workflow_run.workflow_type,
+                "confidence": workflow_run.confidence,
+                "created_at": workflow_run.created_at,
+                "updated_at": workflow_run.updated_at,
+                "ticket_count": ticket_count,
+                "human_review_required": bool(
+                    reply_requires_approval
+                    or (
+                        evaluation.requires_human_review
+                        if evaluation
+                        else False
+                    )
+                ),
+            }
+        )
+
+    return results
+
+
 @router.post("/run", response_model=WorkflowRunResponse)
 def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db)):
     try:
@@ -337,6 +391,14 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     db.refresh(workflow_run)
 
     return workflow_run
+
+
+@router.get("/run")
+def workflow_run_endpoint_hint():
+    raise HTTPException(
+        status_code=405,
+        detail="Use POST /api/v1/workflows/run with JSON body: {'input_text': '...'}",
+    )
 
 
 @router.get("/{workflow_run_id}", response_model=WorkflowRunResponse)
