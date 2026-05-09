@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 type WorkflowRun = {
   id: number;
@@ -76,7 +77,12 @@ const TIMELINE_STEPS = [
   ["evaluation", "Evaluate", "Score quality and risk"],
 ] as const;
 
-const NAV_ITEMS = ["Dashboard", "Workflows", "Runs", "Benchmarks"] as const;
+const NAV_ITEMS = [
+  ["Dashboard", "/"],
+  ["Workflows", "/workflows/new"],
+  ["Runs", "/runs"],
+  ["Benchmarks", "/benchmarks"],
+] as const;
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
@@ -255,11 +261,11 @@ export default async function WorkflowRunDetailsPage({
           </div>
 
           <nav className="mt-8 space-y-1">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.map(([item, href]) => {
               const active = item === "Runs";
 
               return (
-                <a
+                <Link
                   key={item}
                   className={cx(
                     "flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-medium transition",
@@ -267,11 +273,11 @@ export default async function WorkflowRunDetailsPage({
                       ? "border border-sky-300/20 bg-sky-300/10 text-sky-100 shadow-lg shadow-sky-950/20"
                       : "text-slate-400 hover:bg-white/[0.045] hover:text-white",
                   )}
-                  href="#"
+                  href={href}
                 >
                   <span>{item}</span>
                   {active ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" /> : null}
-                </a>
+                </Link>
               );
             })}
           </nav>
