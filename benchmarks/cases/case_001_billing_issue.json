@@ -1,0 +1,12 @@
+{
+  "id": "case_001_billing_issue",
+  "category": "billing",
+  "input_text": "Acme Corp says invoice still shows unpaid after successful payment.",
+  "expected": {
+    "should_create_ticket": true,
+    "should_create_reply": true,
+    "should_require_human_review": true,
+    "expected_issue_category": "billing",
+    "expected_min_quality_score": 0.7
+  }
+}

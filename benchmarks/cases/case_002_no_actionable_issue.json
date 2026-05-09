@@ -1,0 +1,12 @@
+{
+  "id": "case_002_no_actionable_issue",
+  "category": "no_actionable_issue",
+  "input_text": "Habibi is thinking about purchasing a Ferrari sometime next year.",
+  "expected": {
+    "should_create_ticket": false,
+    "should_create_reply": false,
+    "should_require_human_review": false,
+    "expected_issue_category": null,
+    "expected_status": "needs_clarification"
+  }
+}

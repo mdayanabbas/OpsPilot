@@ -1,0 +1,12 @@
+{
+  "id": "case_003_refund_risk",
+  "category": "refund_risk",
+  "input_text": "Beta Foods was charged twice and is demanding a refund today or they will escalate.",
+  "expected": {
+    "should_create_ticket": true,
+    "should_create_reply": true,
+    "should_require_human_review": true,
+    "expected_issue_category": "billing",
+    "expected_risk_level": "medium"
+  }
+}

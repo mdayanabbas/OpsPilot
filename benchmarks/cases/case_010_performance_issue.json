@@ -1,0 +1,12 @@
+{
+  "id": "case_010_performance_issue",
+  "category": "performance_issue",
+  "input_text": "Enterprise users report the reports page takes over 20 seconds to load during peak hours.",
+  "expected": {
+    "should_create_ticket": true,
+    "should_create_reply": true,
+    "should_require_human_review": false,
+    "expected_issue_category": "performance",
+    "expected_team": "backend"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "case_007_auth_account_issue",
+  "category": "auth_account_issue",
+  "input_text": "A customer cannot access their admin account after enabling SSO and is locked out of billing settings.",
+  "expected": {
+    "should_create_ticket": true,
+    "should_create_reply": true,
+    "should_require_human_review": true,
+    "expected_issue_category": "auth",
+    "expected_team": "backend"
+  }
+}
