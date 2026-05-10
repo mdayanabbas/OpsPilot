@@ -41,6 +41,18 @@ def ensure_database_schema():
                 text("UPDATE tool_calls SET attempt = 1 WHERE attempt < 1")
             )
 
+    if "incidents" in inspector.get_table_names():
+        incident_columns = {
+            column["name"] for column in inspector.get_columns("incidents")
+        }
+        with engine.begin() as connection:
+            if "root_cause_summary" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN root_cause_summary TEXT"))
+            if "operational_risks" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN operational_risks TEXT"))
+            if "recommended_actions" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN recommended_actions TEXT"))
+
 
 def get_db():
     db = SessionLocal()

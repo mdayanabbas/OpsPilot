@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -6,6 +8,18 @@ from app.models.incident import Incident
 from app.services.incident_service import related_workflow_ids_for_incident
 
 router = APIRouter()
+
+
+def _json_field(value: str | None, default):
+    if not value:
+        return default
+
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return default
+
+    return parsed if isinstance(parsed, type(default)) else default
 
 
 @router.get("")
@@ -26,6 +40,9 @@ def list_incidents(db: Session = Depends(get_db)):
             "severity": incident.severity,
             "workflow_count": incident.workflow_count,
             "related_workflow_ids": related_workflow_ids_for_incident(db, incident),
+            "root_cause_clusters": _json_field(incident.root_cause_summary, []),
+            "operational_risks": _json_field(incident.operational_risks, []),
+            "recommended_actions": _json_field(incident.recommended_actions, []),
             "first_detected_at": incident.first_detected_at,
             "last_detected_at": incident.last_detected_at,
             "status": incident.status,

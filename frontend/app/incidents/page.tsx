@@ -11,6 +11,13 @@ type Incident = {
   severity: "medium" | "high" | "critical" | string;
   workflow_count: number;
   related_workflow_ids: number[];
+  root_cause_clusters: Array<{
+    theme: string;
+    workflow_count: number;
+    summary: string;
+  }>;
+  operational_risks: string[];
+  recommended_actions: string[];
   first_detected_at: string;
   last_detected_at: string;
   status: string;
@@ -169,6 +176,68 @@ export default function IncidentsPage() {
                             Run #{workflowId}
                           </Link>
                         ))}
+                      </div>
+
+                      <div className="mt-5 rounded-3xl border border-sky-300/15 bg-sky-300/[0.045] p-5">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-200/70">
+                          Founder Intelligence
+                        </p>
+
+                        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
+                          <div>
+                            <h4 className="text-sm font-semibold text-white">Root Cause Clusters</h4>
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                              {incident.root_cause_clusters.length ? (
+                                incident.root_cause_clusters.map((cluster) => (
+                                  <div key={cluster.theme} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <p className="text-sm font-semibold text-white">{titleize(cluster.theme)}</p>
+                                      <Badge className="border-sky-300/20 bg-sky-300/10 text-sky-100">
+                                        {cluster.workflow_count}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-2 text-xs leading-5 text-slate-400">{cluster.summary}</p>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-slate-400">
+                                  No clusters generated yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="text-sm font-semibold text-white">Operational Risks</h4>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {incident.operational_risks.length ? (
+                                incident.operational_risks.map((risk) => (
+                                  <Badge key={risk} className="border-amber-300/25 bg-amber-300/10 text-amber-100">
+                                    {risk}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-sm text-slate-400">No risk tags generated.</span>
+                              )}
+                            </div>
+
+                            <h4 className="mt-5 text-sm font-semibold text-white">Recommended Actions</h4>
+                            {incident.recommended_actions.length ? (
+                              <ol className="mt-3 space-y-2">
+                                {incident.recommended_actions.map((action, index) => (
+                                  <li key={action} className="flex gap-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm leading-6 text-slate-300">
+                                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-slate-200">
+                                      {index + 1}
+                                    </span>
+                                    <span>{action}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : (
+                              <p className="mt-3 text-sm text-slate-400">No recommended actions generated.</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-5 grid gap-3 text-xs text-slate-500 md:grid-cols-2">
