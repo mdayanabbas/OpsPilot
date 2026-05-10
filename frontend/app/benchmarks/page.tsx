@@ -40,6 +40,7 @@ const NAV_ITEMS = [
   ["Workflows", "/workflows/new"],
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
+  ["Monitoring", "/monitoring"],
 ] as const;
 
 function percent(value: number | null | undefined) {

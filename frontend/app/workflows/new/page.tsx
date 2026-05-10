@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   ["Workflows", "/workflows/new"],
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
+  ["Monitoring", "/monitoring"],
 ] as const;
 
 type WorkflowRunResponse = {

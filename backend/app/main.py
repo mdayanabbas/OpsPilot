@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine, ensure_database_schema
 from app.api.router import api_router
+from app.services.email_worker import start_email_worker
 
 # Import models so SQLAlchemy registers them
 from app import models  # noqa: F401
@@ -28,6 +29,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
+
+
+@app.on_event("startup")
+async def start_background_workers():
+    start_email_worker()
 
 
 @app.get("/health")

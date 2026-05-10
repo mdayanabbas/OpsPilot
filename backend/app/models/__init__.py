@@ -8,6 +8,7 @@ from app.models.evaluation import EvaluationResult
 from app.models.approval import ApprovalDecision
 from app.models.memory import MemoryItem
 from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
+from app.models.processed_email import ProcessedEmail
 
 __all__ = [
     "WorkflowRun",
@@ -21,4 +22,5 @@ __all__ = [
     "MemoryItem",
     "BenchmarkRun",
     "BenchmarkCaseResult",
+    "ProcessedEmail",
 ]

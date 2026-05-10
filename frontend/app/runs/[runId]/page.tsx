@@ -103,6 +103,7 @@ const NAV_ITEMS = [
   ["Workflows", "/workflows/new"],
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
+  ["Monitoring", "/monitoring"],
 ] as const;
 
 async function fetchJson<T>(path: string): Promise<T> {

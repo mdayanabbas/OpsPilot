@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   ["Workflows", "/workflows/new"],
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
+  ["Monitoring", "/monitoring"],
 ] as const;
 
 function titleize(value: string | null | undefined) {
