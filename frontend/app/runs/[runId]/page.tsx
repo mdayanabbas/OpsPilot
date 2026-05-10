@@ -104,6 +104,7 @@ const NAV_ITEMS = [
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
   ["Monitoring", "/monitoring"],
+  ["Incidents", "/incidents"],
 ] as const;
 
 async function fetchJson<T>(path: string): Promise<T> {

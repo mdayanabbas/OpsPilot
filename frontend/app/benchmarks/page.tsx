@@ -41,6 +41,7 @@ const NAV_ITEMS = [
   ["Runs", "/runs"],
   ["Benchmarks", "/benchmarks"],
   ["Monitoring", "/monitoring"],
+  ["Incidents", "/incidents"],
 ] as const;
 
 function percent(value: number | null | undefined) {

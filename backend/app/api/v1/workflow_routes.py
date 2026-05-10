@@ -26,6 +26,7 @@ from app.schemas.tool_call_schema import ToolCallResponse
 from app.schemas.workflow_schema import WorkflowRunCreate, WorkflowRunResponse
 from app.schemas.memory_schema import MemoryItemResponse
 from app.services.memory_service import save_memory_from_workflow, search_memory
+from app.services.incident_service import detect_incidents
 
 router = APIRouter()
 
@@ -566,6 +567,7 @@ def _execute_workflow_run_sync(
     )
 
     workflow_run.status = "completed"
+    detect_incidents(db)
 
     db.commit()
     db.refresh(workflow_run)
