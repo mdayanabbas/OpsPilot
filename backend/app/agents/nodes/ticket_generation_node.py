@@ -76,6 +76,9 @@ def _fallback_ticket(issue: dict) -> dict:
             "Identify the likely root cause.",
             "Confirm the fix or next action with supporting evidence.",
         ],
+        "attempts": 0,
+        "fallback_used": True,
+        "provider": "fallback",
     }
 
 
@@ -118,6 +121,9 @@ def _normalize_ticket(raw_ticket: dict, issue: dict) -> dict:
             fallback["description"],
         ),
         "acceptance_criteria": acceptance_criteria,
+        "attempts": raw_ticket.get("attempts", 1),
+        "fallback_used": raw_ticket.get("fallback_used", False),
+        "provider": raw_ticket.get("provider", "gemini"),
     }
 
 

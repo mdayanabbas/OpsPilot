@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import Base, engine
+from app.database import Base, engine, ensure_database_schema
 from app.api.router import api_router
 
 # Import models so SQLAlchemy registers them
 from app import models  # noqa: F401
 
 Base.metadata.create_all(bind=engine)
+ensure_database_schema()
 
 app = FastAPI(
     title="OpsPilot API",

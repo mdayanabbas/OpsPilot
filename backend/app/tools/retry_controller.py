@@ -33,6 +33,9 @@ def retry_with_fallback(
 
     try:
         fallback_result = fallback()
+        if isinstance(fallback_result, dict):
+            fallback_result.setdefault("provider", "fallback")
+            fallback_result.setdefault("fallback_used", True)
         return {
             "success": True,
             "result": fallback_result,

@@ -85,6 +85,8 @@ def _fallback_reply(issue: dict) -> dict:
         "risk_level": "medium",
         "risk_reason": "Generated as a conservative fallback and should be reviewed before sending.",
         "requires_approval": True,
+        "provider": "fallback",
+        "fallback_used": True,
     }
 
 
@@ -117,6 +119,8 @@ def _normalize_reply(raw_reply: dict, issue: dict) -> dict:
         "risk_level": risk_level,
         "risk_reason": risk_reason,
         "requires_approval": True,
+        "provider": raw_reply.get("provider", "gemini"),
+        "fallback_used": raw_reply.get("fallback_used", False),
     }
 
 
@@ -124,7 +128,6 @@ def generate_customer_reply(issue: dict) -> dict:
     if not isinstance(issue, dict):
         fallback = _fallback_reply({})
         fallback["attempts"] = 0
-        fallback["fallback_used"] = True
         return fallback
 
     prompt_issue = {
@@ -172,6 +175,10 @@ Issue:
         reply = _normalize_reply(retry_result["result"], issue)
 
     reply["attempts"] = retry_result["attempts"]
-    reply["fallback_used"] = retry_result["fallback_used"]
+    reply["fallback_used"] = reply.get("fallback_used", retry_result["fallback_used"])
+    reply["provider"] = reply.get(
+        "provider",
+        "fallback" if reply["fallback_used"] else "gemini",
+    )
 
     return reply

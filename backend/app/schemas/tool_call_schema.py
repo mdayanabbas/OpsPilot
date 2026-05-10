@@ -9,6 +9,7 @@ class ToolCallResponse(BaseModel):
     workflow_run_id: int
     step_name: str
     tool_name: str
+    provider: str = "gemini"
     status: str
     attempt: int
     latency_ms: Optional[int]

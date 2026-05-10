@@ -28,6 +28,8 @@ def _fallback_intent(
         "confidence": confidence,
         "reason": reason,
         "requires_clarification": True,
+        "provider": "fallback",
+        "fallback_used": True,
     }
 
 
@@ -62,7 +64,6 @@ def detect_workflow_intent(input_text: str) -> dict:
     if not isinstance(input_text, str) or not input_text.strip():
         intent = _fallback_intent("Input text is empty or invalid.")
         intent["attempts"] = 0
-        intent["fallback_used"] = True
         return intent
 
     prompt = f"""
@@ -102,6 +103,10 @@ Input:
     intent["fallback_used"] = raw_intent.get(
         "fallback_used",
         retry_result["fallback_used"],
+    )
+    intent["provider"] = raw_intent.get(
+        "provider",
+        "fallback" if intent["fallback_used"] else "gemini",
     )
 
     return intent
