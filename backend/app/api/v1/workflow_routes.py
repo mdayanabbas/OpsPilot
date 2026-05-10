@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.agents.nodes.evaluation_node import evaluate_workflow_output
+from app.agents.nodes.founder_summary_node import generate_founder_summary
 from app.agents.nodes.intent_router_node import detect_workflow_intent
 from app.agents.nodes.issue_extraction_node import extract_issues
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
+from app.config import LLM_PROVIDER
 from app.database import get_db
 from app.models.agent_step import AgentStep
 from app.models.evaluation import EvaluationResult
@@ -25,6 +27,38 @@ from app.schemas.workflow_schema import WorkflowRunCreate, WorkflowRunResponse
 router = APIRouter()
 
 LOW_INTENT_CONFIDENCE_THRESHOLD = 0.60
+
+
+def _configured_provider() -> str:
+    return LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local"} else "gemini"
+
+
+def _result_provider(result: dict | None, default: str | None = None) -> str:
+    if isinstance(result, dict):
+        provider = result.get("provider")
+        if provider in {"gemini", "local", "fallback"}:
+            return provider
+
+        if result.get("fallback_used"):
+            return "fallback"
+
+    return default or _configured_provider()
+
+
+def _result_fallback_used(result: dict | None) -> bool:
+    return bool(result.get("fallback_used")) if isinstance(result, dict) else False
+
+
+def _tool_call_payload(tool_call: ToolCall) -> dict:
+    return {
+        "step_name": tool_call.step_name,
+        "tool_name": tool_call.tool_name,
+        "provider": tool_call.provider,
+        "status": tool_call.status,
+        "attempt": tool_call.attempt,
+        "fallback_used": tool_call.fallback_used,
+        "error_message": tool_call.error_message,
+    }
 
 
 @router.get("")
@@ -111,11 +145,12 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
             )
         )
         db.add(
-            ToolCall(
-                workflow_run_id=workflow_run.id,
-                step_name="intent_router",
-                tool_name="gemini_intent_router",
-                status="failed",
+                ToolCall(
+                    workflow_run_id=workflow_run.id,
+                    step_name="intent_router",
+                    tool_name="intent_router",
+                    provider=_configured_provider(),
+                    status="failed",
                 attempt=1,
                 fallback_used=False,
                 error_message=str(exc),
@@ -166,10 +201,11 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     intent_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="intent_router",
-        tool_name="gemini_intent_router",
+        tool_name="intent_router",
+        provider=_result_provider(intent_result),
         status="success",
-        attempt=1,
-        fallback_used=False,
+        attempt=intent_result.get("attempts", 1),
+        fallback_used=_result_fallback_used(intent_result),
         error_message=None,
     )
 
@@ -213,7 +249,8 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
                 ToolCall(
                     workflow_run_id=workflow_run.id,
                     step_name="issue_extraction",
-                    tool_name="gemini_issue_extractor",
+                    tool_name="issue_extraction",
+                    provider=_configured_provider(),
                     status="failed",
                     attempt=1,
                     fallback_used=False,
@@ -243,10 +280,11 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     issue_extraction_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="issue_extraction",
-        tool_name="gemini_issue_extractor",
+        tool_name="issue_extraction",
+        provider=_result_provider(issue_result),
         status="success",
-        attempt=1,
-        fallback_used=False,
+        attempt=issue_result.get("attempts", 1),
+        fallback_used=_result_fallback_used(issue_result),
         error_message=None,
     )
 
@@ -305,19 +343,21 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     ticket_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="ticket_generation",
-        tool_name="gemini_ticket_generator",
+        tool_name="ticket_generation",
+        provider=_result_provider(generated_ticket),
         status="success",
-        attempt=1,
-        fallback_used=False,
+        attempt=generated_ticket.get("attempts", 1),
+        fallback_used=_result_fallback_used(generated_ticket),
         error_message=None,
     )
     reply_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="reply_generation",
-        tool_name="gemini_reply_generator",
+        tool_name="reply_generation",
+        provider=_result_provider(reply_result),
         status="success",
         attempt=reply_result.get("attempts", 1),
-        fallback_used=reply_result.get("fallback_used", False),
+        fallback_used=_result_fallback_used(reply_result),
         error_message=None,
     )
 
@@ -352,19 +392,22 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         status="draft",
     )
 
+    founder_summary_result = generate_founder_summary(
+        issue=first_issue,
+        ticket=generated_ticket,
+        reply=reply_result,
+        evaluation=evaluation_result,
+        tool_calls=[
+            _tool_call_payload(tool_call)
+            for tool_call in starter_tool_calls
+        ],
+    )
+
     founder_summary = FounderSummary(
         workflow_run_id=workflow_run.id,
-        summary=(
-            "A billing-related customer issue was detected. The customer reports that an invoice "
-            "still appears unpaid after payment. This may indicate a payment status synchronization problem."
-        ),
-        risks="Customer-facing billing issue may create trust risk if repeated.",
-        recommended_actions=(
-            "1. Review payment webhook/sync logs.\n"
-            "2. Confirm whether invoice status updated internally.\n"
-            "3. Approve customer reply before sending.\n"
-            "4. Create backend investigation ticket."
-        ),
+        summary=founder_summary_result["summary"],
+        risks=founder_summary_result["risks"],
+        recommended_actions=founder_summary_result["recommended_actions"],
     )
 
     evaluation = EvaluationResult(

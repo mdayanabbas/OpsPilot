@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { ApprovalActions } from "../../../components/approvals/ApprovalActions";
 
 type WorkflowRun = {
   id: number;
@@ -16,6 +17,7 @@ type ToolCall = {
   workflow_run_id: number;
   step_name: string;
   tool_name: string;
+  provider: string;
   status: string;
   attempt: number;
   latency_ms: number | null;
@@ -59,11 +61,19 @@ type Evaluation = {
   risks: string | null;
 };
 
+type FounderSummary = {
+  id: number;
+  workflow_run_id: number;
+  summary: string;
+  risks: string | null;
+  recommended_actions: string | null;
+};
+
 type WorkflowOutputs = {
   workflow_run: WorkflowRun;
   tickets: Ticket[];
   customer_replies: CustomerReply[];
-  founder_summary: unknown;
+  founder_summary: FounderSummary | null;
   evaluation: Evaluation | null;
 };
 
@@ -116,15 +126,15 @@ function dateTime(value: string) {
 }
 
 function toneClass(tone: string) {
-  if (tone === "completed" || tone === "success" || tone === "low") {
+  if (tone === "completed" || tone === "success" || tone === "low" || tone === "healthy") {
     return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-emerald-950/30";
   }
 
-  if (tone === "failed" || tone === "high") {
+  if (tone === "failed" || tone === "high" || tone === "degraded") {
     return "border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-rose-950/30";
   }
 
-  if (tone === "needs_clarification" || tone === "medium" || tone === "skipped") {
+  if (tone === "needs_clarification" || tone === "medium" || tone === "skipped" || tone === "recovered") {
     return "border-amber-400/25 bg-amber-400/10 text-amber-200 shadow-amber-950/30";
   }
 
@@ -161,6 +171,65 @@ function timelineStatus(
   if (call) return call.status === "success" ? "completed" : call.status;
 
   return workflow.status === "needs_clarification" ? "skipped" : "pending";
+}
+
+function metricToneClass(tone: string = "default") {
+  if (tone === "healthy" || tone === "success") {
+    return "border-emerald-300/20 bg-emerald-300/[0.07] shadow-emerald-950/20";
+  }
+
+  if (tone === "recovered" || tone === "medium") {
+    return "border-amber-300/20 bg-amber-300/[0.07] shadow-amber-950/20";
+  }
+
+  if (tone === "failed" || tone === "degraded") {
+    return "border-rose-300/20 bg-rose-300/[0.07] shadow-rose-950/20";
+  }
+
+  return "border-white/10 bg-white/[0.045] shadow-black/15";
+}
+
+function providerLabel(provider: string | null | undefined, fallbackUsed = false) {
+  if (provider === "local" || provider === "fallback" || fallbackUsed) {
+    return "LM Studio";
+  }
+
+  return "Gemini";
+}
+
+function logicalToolLabel(toolName: string) {
+  return titleize(
+    toolName
+      .replace(/^gemini_/, "")
+      .replace(/_generator$/, "")
+      .replace(/_extractor$/, "")
+      .replace(/_router$/, "_router"),
+  );
+}
+
+function providerSummary(toolCalls: ToolCall[]) {
+  const providers = new Set<string>();
+
+  toolCalls.forEach((toolCall) => {
+    providers.add(providerLabel(toolCall.provider, toolCall.fallback_used));
+  });
+
+  if (providers.size > 1) return "Mixed providers";
+  return providers.values().next().value ?? "Gemini";
+}
+
+function executionHealth(
+  workflow: WorkflowRun,
+  failedToolCalls: number,
+  fallbackActivated: boolean,
+  successfulRecoveries: number,
+) {
+  if (workflow.status === "failed") return "failed";
+  if (failedToolCalls > 0 && successfulRecoveries > 0) return "recovered";
+  if (failedToolCalls > 0) return "degraded";
+  if (fallbackActivated && successfulRecoveries > 0) return "recovered";
+  if (fallbackActivated) return "degraded";
+  return "healthy";
 }
 
 function Badge({ children, tone = "default", className }: { children: ReactNode; tone?: string; className?: string }) {
@@ -206,10 +275,24 @@ function Panel({
   );
 }
 
-function MetricTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function MetricTile({ label, value, hint, tone = "default" }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.045] p-5 shadow-xl shadow-black/15">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+    <div className={cx("rounded-3xl border p-5 shadow-xl", metricToneClass(tone))}>
+      <div className="flex items-center gap-2">
+        <span
+          className={cx(
+            "h-2 w-2 rounded-full",
+            tone === "healthy" || tone === "success"
+              ? "bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.55)]"
+              : tone === "recovered" || tone === "medium"
+                ? "bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.5)]"
+                : tone === "failed" || tone === "degraded"
+                  ? "bg-rose-300 shadow-[0_0_12px_rgba(253,164,175,0.5)]"
+                  : "bg-slate-500",
+          )}
+        />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+      </div>
       <p className="mt-3 text-2xl font-semibold tracking-tight text-white">{value}</p>
       {hint ? <p className="mt-2 text-xs text-slate-500">{hint}</p> : null}
     </div>
@@ -240,7 +323,15 @@ export default async function WorkflowRunDetailsPage({
   const ticket = outputs.tickets[0];
   const reply = outputs.customer_replies[0];
   const evaluation = outputs.evaluation;
+  const founderSummary = outputs.founder_summary;
   const fallbackUsed = toolCalls.some((toolCall) => toolCall.fallback_used);
+  const totalRetries = toolCalls.reduce((total, toolCall) => total + Math.max(toolCall.attempt - 1, 0), 0);
+  const failedToolCalls = toolCalls.filter((toolCall) => toolCall.status === "failed").length;
+  const successfulRecoveries = toolCalls.filter(
+    (toolCall) => toolCall.fallback_used && toolCall.status === "success",
+  ).length;
+  const primaryProvider = providerSummary(toolCalls);
+  const health = executionHealth(workflow, failedToolCalls, fallbackUsed, successfulRecoveries);
   const humanReviewRequired = Boolean(evaluation?.requires_human_review || reply?.requires_approval);
 
   return (
@@ -346,6 +437,59 @@ export default async function WorkflowRunDetailsPage({
               <MetricTile label="Tool Fallback" value={fallbackUsed ? "Used" : "None"} />
             </section>
 
+            <Panel title="Execution Insights" eyebrow="Runtime reliability">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap gap-2">
+                  <Badge tone={health}>execution {health}</Badge>
+                  <Badge tone={primaryProvider === "Mixed providers" ? "medium" : "success"}>
+                    {primaryProvider}
+                  </Badge>
+                </div>
+                <p className="text-xs leading-5 text-slate-500">
+                  Derived from recorded provider activity for this workflow run.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <MetricTile
+                  label="Total Tool Calls"
+                  value={String(toolCalls.length)}
+                  hint="Provider operations recorded"
+                  tone={health}
+                />
+                <MetricTile
+                  label="Total Retries"
+                  value={String(totalRetries)}
+                  hint="Extra attempts beyond first pass"
+                  tone={totalRetries > 0 ? "recovered" : "healthy"}
+                />
+                <MetricTile
+                  label="Fallback Activated"
+                  value={fallbackUsed ? "Yes" : "No"}
+                  hint={fallbackUsed ? "Secondary provider was used" : "Primary provider completed the run"}
+                  tone={fallbackUsed ? "recovered" : "healthy"}
+                />
+                <MetricTile
+                  label="Failed Tool Calls"
+                  value={String(failedToolCalls)}
+                  hint={failedToolCalls > 0 ? "Failures detected in execution log" : "No failed calls recorded"}
+                  tone={failedToolCalls > 0 ? "failed" : "healthy"}
+                />
+                <MetricTile
+                  label="Successful Recoveries"
+                  value={String(successfulRecoveries)}
+                  hint={successfulRecoveries > 0 ? "Fallback calls completed successfully" : "No recovery path needed"}
+                  tone={successfulRecoveries > 0 ? "recovered" : "healthy"}
+                />
+                <MetricTile
+                  label="Primary Provider"
+                  value={primaryProvider}
+                  hint="Provider recorded separately from tool name"
+                  tone={primaryProvider === "Mixed providers" ? "recovered" : "success"}
+                />
+              </div>
+            </Panel>
+
             <Panel title="Workflow Timeline" eyebrow="Connected agent stages">
               <div className="grid gap-4 xl:grid-cols-5">
                 {TIMELINE_STEPS.map(([key, label, description], index) => {
@@ -383,18 +527,21 @@ export default async function WorkflowRunDetailsPage({
                       key={toolCall.id}
                       className="rounded-3xl border border-white/10 bg-black/20 p-4 shadow-xl shadow-black/10"
                     >
-                      <div className="grid gap-4 lg:grid-cols-[1.2fr_0.45fr_0.35fr_0.55fr] lg:items-center">
+                      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.4fr_0.45fr_0.3fr_0.55fr] lg:items-center">
                         <div>
-                          <p className="text-sm font-semibold text-white">{toolCall.tool_name}</p>
+                          <p className="text-sm font-semibold text-white">{logicalToolLabel(toolCall.tool_name)}</p>
                           <p className="mt-1 text-xs text-slate-500">{titleize(toolCall.step_name)}</p>
                         </div>
                         <Badge tone={toolCall.status}>{titleize(toolCall.status)}</Badge>
+                        <Badge tone={providerLabel(toolCall.provider, toolCall.fallback_used) === "LM Studio" ? "medium" : "success"}>
+                          {providerLabel(toolCall.provider, toolCall.fallback_used)}
+                        </Badge>
                         <div>
                           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-600">Attempt</p>
                           <p className="mt-1 text-sm font-semibold text-slate-200">{toolCall.attempt}</p>
                         </div>
                         <Badge tone={toolCall.fallback_used ? "medium" : "success"}>
-                          {toolCall.fallback_used ? "fallback used" : "primary"}
+                          {toolCall.fallback_used ? "Recovered via fallback" : "Primary path"}
                         </Badge>
                       </div>
 
@@ -447,6 +594,12 @@ export default async function WorkflowRunDetailsPage({
                         <p className="mt-2 text-sm leading-6 text-sky-100/80">{ticket.source_evidence}</p>
                       </div>
                     ) : null}
+
+                    <ApprovalActions
+                      workflowRunId={workflow.id}
+                      itemType="ticket"
+                      itemId={ticket.id}
+                    />
                   </div>
                 ) : (
                   <EmptyState>No ticket generated. The workflow likely needs clarification before creating engineering work.</EmptyState>
@@ -482,6 +635,12 @@ export default async function WorkflowRunDetailsPage({
                           {reply.draft_reply ?? "Reply withheld due to risk."}
                         </p>
                       </div>
+
+                      <ApprovalActions
+                        workflowRunId={workflow.id}
+                        itemType="reply"
+                        itemId={reply.id}
+                      />
                     </div>
 
                     {reply.risk_reason ? (
@@ -495,6 +654,35 @@ export default async function WorkflowRunDetailsPage({
                 )}
               </Panel>
             </section>
+
+            <Panel title="Founder Summary" eyebrow="Executive readout">
+              {founderSummary ? (
+                <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                  <div className="rounded-3xl border border-sky-300/15 bg-sky-300/[0.055] p-5 shadow-xl shadow-sky-950/15">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-200/70">Summary</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-200">{founderSummary.summary}</p>
+                  </div>
+
+                  <div className="rounded-3xl border border-amber-300/20 bg-amber-300/[0.065] p-5 shadow-xl shadow-amber-950/15">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-100/75">Risks</p>
+                    <p className="mt-3 text-sm leading-7 text-amber-50/90">
+                      {founderSummary.risks ?? "No risks recorded."}
+                    </p>
+                  </div>
+
+                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5 shadow-xl shadow-black/15 xl:col-span-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Recommended Actions
+                    </p>
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-300">
+                      {founderSummary.recommended_actions ?? "No recommended actions recorded."}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState>No founder summary recorded for this run.</EmptyState>
+              )}
+            </Panel>
 
             <Panel title="Evaluation" eyebrow="Quality metrics">
               {evaluation ? (

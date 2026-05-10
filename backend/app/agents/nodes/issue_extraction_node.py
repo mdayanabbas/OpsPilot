@@ -164,7 +164,7 @@ ISSUE_EXTRACTION_RESPONSE_SCHEMA = {
 
 
 def _empty_issues() -> dict:
-    return {"issues": []}
+    return {"issues": [], "attempts": 0, "fallback_used": False, "provider": "fallback"}
 
 
 def _is_actionable_text(text: str) -> bool:
@@ -267,7 +267,11 @@ def _normalize_issue(raw_issue: dict, input_text: str) -> dict | None:
 def _normalize_issues(raw_result: dict, input_text: str) -> dict:
     raw_issues = raw_result.get("issues")
     if not isinstance(raw_issues, list):
-        return _empty_issues()
+        empty = _empty_issues()
+        empty["attempts"] = raw_result.get("attempts", 1)
+        empty["fallback_used"] = raw_result.get("fallback_used", False)
+        empty["provider"] = raw_result.get("provider", "gemini")
+        return empty
 
     issues = []
     for raw_issue in raw_issues:
@@ -275,7 +279,12 @@ def _normalize_issues(raw_result: dict, input_text: str) -> dict:
         if issue:
             issues.append(issue)
 
-    return {"issues": issues}
+    return {
+        "issues": issues,
+        "attempts": raw_result.get("attempts", 1),
+        "fallback_used": raw_result.get("fallback_used", False),
+        "provider": raw_result.get("provider", "gemini"),
+    }
 
 
 def extract_issues(input_text: str) -> dict:
@@ -351,6 +360,9 @@ Input:
     try:
         result = generate_json(prompt, ISSUE_EXTRACTION_RESPONSE_SCHEMA)
     except (GeminiServiceError, ValueError, TypeError):
-        return _empty_issues()
+        empty = _empty_issues()
+        empty["fallback_used"] = True
+        empty["provider"] = "fallback"
+        return empty
 
     return _normalize_issues(result, cleaned_input)

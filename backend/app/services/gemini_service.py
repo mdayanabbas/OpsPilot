@@ -53,13 +53,15 @@ def _generate_json_gemini(prompt: str, response_schema: dict) -> dict:
     result = _extract_json(response)
     result.setdefault("attempts", 1)
     result.setdefault("fallback_used", False)
+    result.setdefault("provider", "gemini")
     return result
 
 
-def _generate_json_local(prompt: str, response_schema: dict) -> dict:
+def _generate_json_local(prompt: str, response_schema: dict, *, fallback_used: bool) -> dict:
     result = generate_json_local(prompt, response_schema)
     result.setdefault("attempts", 1)
-    result["fallback_used"] = True
+    result["fallback_used"] = fallback_used
+    result["provider"] = "fallback" if fallback_used else "local"
     return result
 
 
@@ -67,13 +69,13 @@ def generate_json(prompt: str, response_schema: dict) -> dict:
     if not prompt.strip():
         raise GeminiServiceError("Prompt cannot be empty")
 
-    provider = LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local", "auto"} else "auto"
+    provider = LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local", "auto"} else "local"
     print(f"[gemini_service] provider={provider}")
 
     if provider == "local":
-        print("[gemini_service] using local provider")
+        print("[LLM_service] using local provider")
         try:
-            return _generate_json_local(prompt, response_schema)
+            return _generate_json_local(prompt, response_schema, fallback_used=False)
         except LocalLLMServiceError as exc:
             raise GeminiServiceError(
                 f"Local provider failed: {type(exc).__name__}: {exc}"
@@ -96,7 +98,7 @@ def generate_json(prompt: str, response_schema: dict) -> dict:
 
     print("[gemini_service] falling back to local provider")
     try:
-        return _generate_json_local(prompt, response_schema)
+        return _generate_json_local(prompt, response_schema, fallback_used=True)
     except LocalLLMServiceError as exc:
         raise GeminiServiceError(
             "Gemini request failed and local LLM fallback failed: "
