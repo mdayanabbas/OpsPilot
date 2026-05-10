@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.agents.nodes.evaluation_node import evaluate_workflow_output
@@ -8,7 +8,7 @@ from app.agents.nodes.issue_extraction_node import extract_issues
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
 from app.config import LLM_PROVIDER
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models.agent_step import AgentStep
 from app.models.evaluation import EvaluationResult
 from app.models.memory import MemoryItem
@@ -158,20 +158,68 @@ def list_workflow_runs(db: Session = Depends(get_db)):
 
 
 @router.post("/run", response_model=WorkflowRunResponse)
-def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db)):
+def create_workflow_run(
+    payload: WorkflowRunCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    workflow_run = WorkflowRun(
+        input_text=payload.input_text,
+        status="running",
+        workflow_type="customer_feedback_triage",
+        confidence=None,
+    )
+    db.add(workflow_run)
+    db.commit()
+    db.refresh(workflow_run)
+
+    background_tasks.add_task(
+        _execute_workflow_run_background,
+        workflow_run.id,
+        payload.input_text,
+    )
+
+    return workflow_run
+
+
+def _execute_workflow_run_background(workflow_run_id: int, input_text: str):
+    db = SessionLocal()
+    try:
+        _execute_workflow_run_sync(
+            payload=WorkflowRunCreate(input_text=input_text),
+            db=db,
+            workflow_run_id=workflow_run_id,
+        )
+    finally:
+        db.close()
+
+
+def _execute_workflow_run_sync(
+    payload: WorkflowRunCreate,
+    db: Session,
+    workflow_run_id: int | None = None,
+):
     try:
         print("[workflow_routes] calling detect_workflow_intent")
         intent_result = detect_workflow_intent(payload.input_text)
         print(f"[workflow_routes] intent_result={intent_result}")
     except Exception as exc:
         print(f"[workflow_routes] intent_router exception={exc!r}")
-        workflow_run = WorkflowRun(
-            input_text=payload.input_text,
-            status="failed",
-            workflow_type="customer_feedback_triage",
-            confidence=0.0,
-        )
-        db.add(workflow_run)
+        if workflow_run_id is not None:
+            workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+            if not workflow_run:
+                raise HTTPException(status_code=404, detail="Workflow run not found")
+            workflow_run.status = "failed"
+            workflow_run.workflow_type = "customer_feedback_triage"
+            workflow_run.confidence = 0.0
+        else:
+            workflow_run = WorkflowRun(
+                input_text=payload.input_text,
+                status="failed",
+                workflow_type="customer_feedback_triage",
+                confidence=0.0,
+            )
+            db.add(workflow_run)
         db.commit()
         db.refresh(workflow_run)
 
@@ -215,14 +263,21 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         else "running"
     )
 
-    workflow_run = WorkflowRun(
-        input_text=payload.input_text,
-        status=workflow_status,
-        workflow_type=intent_result["workflow_type"],
-        confidence=intent_confidence,
-    )
-
-    db.add(workflow_run)
+    if workflow_run_id is not None:
+        workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+        if not workflow_run:
+            raise HTTPException(status_code=404, detail="Workflow run not found")
+        workflow_run.status = workflow_status
+        workflow_run.workflow_type = intent_result["workflow_type"]
+        workflow_run.confidence = intent_confidence
+    else:
+        workflow_run = WorkflowRun(
+            input_text=payload.input_text,
+            status=workflow_status,
+            workflow_type=intent_result["workflow_type"],
+            confidence=intent_confidence,
+        )
+        db.add(workflow_run)
     db.commit()
     db.refresh(workflow_run)
 
@@ -251,11 +306,11 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         error_message=None,
     )
 
-    if needs_intent_clarification:
-        db.add_all([intent_step, intent_tool_call])
-        db.commit()
-        db.refresh(workflow_run)
+    db.add_all([intent_step, intent_tool_call])
+    db.commit()
+    db.refresh(workflow_run)
 
+    if needs_intent_clarification:
         return workflow_run
 
     planner_step = AgentStep(
@@ -267,6 +322,8 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         confidence=0.88,
         latency_ms=180,
     )
+    db.add(planner_step)
+    db.commit()
 
     try:
         issue_result = extract_issues(payload.input_text)
@@ -276,9 +333,6 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     except Exception as exc:
         db.add_all(
             [
-                intent_step,
-                planner_step,
-                intent_tool_call,
                 AgentStep(
                     workflow_run_id=workflow_run.id,
                     step_name="issue_extraction",
@@ -329,43 +383,10 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         fallback_used=_result_fallback_used(issue_result),
         error_message=None,
     )
-
-    starter_steps = [
-        intent_step,
-        planner_step,
-        issue_extraction_step,
-        AgentStep(
-            workflow_run_id=workflow_run.id,
-            step_name="ticket_generation",
-            status="completed",
-            input_summary="Detected billing-related customer complaint.",
-            output_summary="Created one engineering ticket.",
-            confidence=0.86,
-            latency_ms=260,
-        ),
-        AgentStep(
-            workflow_run_id=workflow_run.id,
-            step_name="reply_generation",
-            status="completed",
-            input_summary="Generated support reply draft.",
-            output_summary="Reply requires human approval before sending.",
-            confidence=0.84,
-            latency_ms=210,
-        ),
-        AgentStep(
-            workflow_run_id=workflow_run.id,
-            step_name="evaluation",
-            status="completed",
-            input_summary="Checked ticket and reply quality.",
-            output_summary="Workflow output passed initial evaluation.",
-            confidence=0.89,
-            latency_ms=150,
-        ),
-    ]
+    db.add_all([issue_extraction_step, issue_extraction_tool_call])
+    db.commit()
 
     if not issues:
-        db.add_all(starter_steps[:3])
-        db.add_all([intent_tool_call, issue_extraction_tool_call])
         workflow_run.status = "needs_clarification"
         db.commit()
         db.refresh(workflow_run)
@@ -378,6 +399,7 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         for value in [
             first_issue.get("title"),
             first_issue.get("description"),
+            first_issue.get("severity"),
         ]
         if isinstance(value, str)
     )
@@ -398,14 +420,6 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
             generated_ticket.get("priority", "medium")
         )
 
-    reply_result = generate_customer_reply(first_issue)
-    evaluation_result = evaluate_workflow_output(
-        issue=first_issue,
-        ticket=generated_ticket,
-        reply=reply_result,
-        fallback_used=reply_result.get("fallback_used", False),
-    )
-
     ticket_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="ticket_generation",
@@ -416,6 +430,20 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         fallback_used=_result_fallback_used(generated_ticket),
         error_message=None,
     )
+    ticket_step = AgentStep(
+        workflow_run_id=workflow_run.id,
+        step_name="ticket_generation",
+        status="completed",
+        input_summary="Detected customer complaint.",
+        output_summary="Created one engineering ticket.",
+        confidence=0.86,
+        latency_ms=260,
+    )
+    db.add_all([ticket_step, ticket_tool_call])
+    db.commit()
+
+    reply_result = generate_customer_reply(first_issue)
+
     reply_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,
         step_name="reply_generation",
@@ -426,6 +454,35 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         fallback_used=_result_fallback_used(reply_result),
         error_message=None,
     )
+    reply_step = AgentStep(
+        workflow_run_id=workflow_run.id,
+        step_name="reply_generation",
+        status="completed",
+        input_summary="Generated support reply draft.",
+        output_summary="Reply requires human approval before sending.",
+        confidence=0.84,
+        latency_ms=210,
+    )
+    db.add_all([reply_step, reply_tool_call])
+    db.commit()
+
+    evaluation_result = evaluate_workflow_output(
+        issue=first_issue,
+        ticket=generated_ticket,
+        reply=reply_result,
+        fallback_used=reply_result.get("fallback_used", False),
+    )
+    evaluation_step = AgentStep(
+        workflow_run_id=workflow_run.id,
+        step_name="evaluation",
+        status="completed",
+        input_summary="Checked ticket and reply quality.",
+        output_summary="Workflow output passed initial evaluation.",
+        confidence=0.89,
+        latency_ms=150,
+    )
+    db.add(evaluation_step)
+    db.commit()
 
     starter_tool_calls = [
         intent_tool_call,
@@ -496,7 +553,6 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     )
 
     db.add_all(starter_tool_calls)
-    db.add_all(starter_steps)
     db.add(ticket)
     db.add(reply)
     db.add(founder_summary)
@@ -578,7 +634,13 @@ def get_workflow_memory(workflow_run_id: int, db: Session = Depends(get_db)):
     if ticket:
         query = " ".join(
             value
-            for value in [ticket.title, ticket.description, reply.issue if reply else None]
+            for value in [
+                ticket.title,
+                ticket.description,
+                ticket.priority,
+                reply.issue if reply else None,
+                f"{reply.risk_level} risk" if reply else None,
+            ]
             if isinstance(value, str)
         )
         related_items = [

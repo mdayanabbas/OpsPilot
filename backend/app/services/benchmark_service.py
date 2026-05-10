@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.api.v1.workflow_routes import create_workflow_run
+from app.api.v1.workflow_routes import _execute_workflow_run_sync
 from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 from app.models.evaluation import EvaluationResult
 from app.models.reply import CustomerReply
@@ -83,7 +83,7 @@ def run_benchmarks(db: Session) -> dict:
 
         try:
             payload = WorkflowRunCreate(input_text=benchmark_case["input_text"])
-            workflow_run = create_workflow_run(payload=payload, db=db)
+            workflow_run = _execute_workflow_run_sync(payload=payload, db=db)
             workflow_run_id = workflow_run.id
 
             tickets = (

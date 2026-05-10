@@ -76,6 +76,7 @@ type MemoryItem = {
   title: string;
   category: string | null;
   content: string;
+  relevance_score: number | null;
   created_at: string;
 };
 
@@ -343,6 +344,9 @@ export default async function WorkflowRunDetailsPage({
   ).length;
   const primaryProvider = providerSummary(toolCalls);
   const health = executionHealth(workflow, failedToolCalls, fallbackUsed, successfulRecoveries);
+  const sortedMemoryItems = [...memoryItems].sort(
+    (left, right) => (right.relevance_score ?? 0) - (left.relevance_score ?? 0),
+  );
   const memoryInfluencedRun = memoryItems.some((memoryItem) => memoryItem.workflow_run_id !== workflow.id);
   const humanReviewRequired = Boolean(evaluation?.requires_human_review || reply?.requires_approval);
 
@@ -700,7 +704,7 @@ export default async function WorkflowRunDetailsPage({
               title="Memory"
               eyebrow={memoryInfluencedRun ? "Memory influenced this run" : "Similar Past Issues"}
             >
-              {memoryItems.length > 0 ? (
+              {sortedMemoryItems.length > 0 ? (
                 <div className="space-y-4">
                   {memoryInfluencedRun ? (
                     <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
@@ -712,10 +716,15 @@ export default async function WorkflowRunDetailsPage({
                   ) : null}
 
                   <div className="grid gap-4 lg:grid-cols-2">
-                    {memoryItems.map((memoryItem) => (
+                    {sortedMemoryItems.map((memoryItem, index) => (
                       <div
                         key={memoryItem.id}
-                        className="rounded-3xl border border-white/10 bg-[#090d16] p-5 shadow-xl shadow-black/15"
+                        className={cx(
+                          "rounded-3xl border p-5 shadow-xl",
+                          index === 0 && memoryItem.relevance_score
+                            ? "border-amber-300/30 bg-amber-300/[0.07] shadow-amber-950/20"
+                            : "border-white/10 bg-[#090d16] shadow-black/15",
+                        )}
                       >
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div>
@@ -726,13 +735,19 @@ export default async function WorkflowRunDetailsPage({
                               {memoryItem.title}
                             </h3>
                           </div>
-                          <Badge tone="default">{memoryItem.category ?? "uncategorized"}</Badge>
+                          <div className="flex flex-wrap gap-2">
+                            {index === 0 && memoryItem.relevance_score ? <Badge tone="recovered">strongest match</Badge> : null}
+                            <Badge tone="default">{memoryItem.category ?? "uncategorized"}</Badge>
+                          </div>
                         </div>
 
                         <p className="mt-4 text-sm leading-6 text-slate-400">{memoryItem.content}</p>
 
                         <div className="mt-5 flex flex-wrap items-center gap-2">
                           <Badge tone="default">{titleize(memoryItem.item_type)}</Badge>
+                          <Badge tone={memoryItem.relevance_score ? "success" : "default"}>
+                            relevance {memoryItem.relevance_score ?? "n/a"}
+                          </Badge>
                           <span className="text-xs text-slate-500">{dateTime(memoryItem.created_at)}</span>
                         </div>
                       </div>

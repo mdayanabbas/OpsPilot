@@ -11,6 +11,7 @@ class MemoryItemResponse(BaseModel):
     title: str
     category: Optional[str]
     content: str
+    relevance_score: Optional[int] = None
     created_at: datetime
 
     class Config:

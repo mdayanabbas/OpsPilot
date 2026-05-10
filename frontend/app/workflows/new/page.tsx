@@ -51,7 +51,7 @@ export default function NewWorkflowPage() {
       }
 
       const workflowRun = (await response.json()) as WorkflowRunResponse;
-      router.push(`/runs/${workflowRun.id}`);
+      router.push(`/runs/live/${workflowRun.id}`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to run OpsPilot agent.");
       setIsSubmitting(false);
