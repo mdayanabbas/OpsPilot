@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.api.v1.workflow_routes import create_workflow_run
+from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 from app.models.evaluation import EvaluationResult
 from app.models.reply import CustomerReply
 from app.models.ticket import Ticket
@@ -135,7 +136,32 @@ def run_benchmarks(db: Session) -> dict:
         else 0.0
     )
 
+    benchmark_run = BenchmarkRun(
+        total_cases=total_cases,
+        passed_cases=passed_cases,
+        failed_cases=failed_cases,
+        pass_rate=round(pass_rate, 2),
+        average_quality_score=round(average_quality_score, 2),
+    )
+    db.add(benchmark_run)
+    db.flush()
+
+    for result in results:
+        db.add(
+            BenchmarkCaseResult(
+                benchmark_run_id=benchmark_run.id,
+                case_id=str(result["case_id"]),
+                passed=result["passed"],
+                failures=json.dumps(result["failures"]),
+                workflow_run_id=result["workflow_run_id"],
+            )
+        )
+
+    db.commit()
+    db.refresh(benchmark_run)
+
     return {
+        "id": benchmark_run.id,
         "total_cases": total_cases,
         "passed_cases": passed_cases,
         "failed_cases": failed_cases,

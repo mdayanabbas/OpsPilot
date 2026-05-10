@@ -6,6 +6,8 @@ from app.models.reply import CustomerReply
 from app.models.summary import FounderSummary
 from app.models.evaluation import EvaluationResult
 from app.models.approval import ApprovalDecision
+from app.models.memory import MemoryItem
+from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 
 __all__ = [
     "WorkflowRun",
@@ -16,4 +18,7 @@ __all__ = [
     "FounderSummary",
     "EvaluationResult",
     "ApprovalDecision",
+    "MemoryItem",
+    "BenchmarkRun",
+    "BenchmarkCaseResult",
 ]

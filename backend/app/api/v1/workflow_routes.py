@@ -11,6 +11,7 @@ from app.config import LLM_PROVIDER
 from app.database import get_db
 from app.models.agent_step import AgentStep
 from app.models.evaluation import EvaluationResult
+from app.models.memory import MemoryItem
 from app.models.reply import CustomerReply
 from app.models.summary import FounderSummary
 from app.models.ticket import Ticket
@@ -23,6 +24,8 @@ from app.schemas.summary_schema import FounderSummaryResponse
 from app.schemas.ticket_schema import TicketResponse
 from app.schemas.tool_call_schema import ToolCallResponse
 from app.schemas.workflow_schema import WorkflowRunCreate, WorkflowRunResponse
+from app.schemas.memory_schema import MemoryItemResponse
+from app.services.memory_service import save_memory_from_workflow, search_memory
 
 router = APIRouter()
 
@@ -49,6 +52,17 @@ def _result_fallback_used(result: dict | None) -> bool:
     return bool(result.get("fallback_used")) if isinstance(result, dict) else False
 
 
+def _result_attempt(result: dict | None, default: int = 1) -> int:
+    raw_attempt = result.get("attempts", default) if isinstance(result, dict) else default
+
+    try:
+        attempt = int(raw_attempt)
+    except (TypeError, ValueError):
+        attempt = default
+
+    return max(1, attempt)
+
+
 def _tool_call_payload(tool_call: ToolCall) -> dict:
     return {
         "step_name": tool_call.step_name,
@@ -59,6 +73,34 @@ def _tool_call_payload(tool_call: ToolCall) -> dict:
         "fallback_used": tool_call.fallback_used,
         "error_message": tool_call.error_message,
     }
+
+
+def _memory_payload(memory_item) -> dict:
+    return {
+        "id": memory_item.id,
+        "workflow_run_id": memory_item.workflow_run_id,
+        "item_type": memory_item.item_type,
+        "title": memory_item.title,
+        "category": memory_item.category,
+        "content": memory_item.content,
+        "created_at": memory_item.created_at,
+    }
+
+
+def _increase_priority_for_memory(priority: str) -> str:
+    if priority == "low":
+        return "medium"
+    if priority == "medium":
+        return "high"
+    return priority
+
+
+def _memory_source_evidence(memory_matches: list[MemoryItem]) -> str | None:
+    if not memory_matches:
+        return None
+
+    first_match = memory_matches[0]
+    return f"Similar past issue found in workflow #{first_match.workflow_run_id}: {first_match.title}"
 
 
 @router.get("")
@@ -145,12 +187,12 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
             )
         )
         db.add(
-                ToolCall(
-                    workflow_run_id=workflow_run.id,
-                    step_name="intent_router",
-                    tool_name="intent_router",
-                    provider=_configured_provider(),
-                    status="failed",
+            ToolCall(
+                workflow_run_id=workflow_run.id,
+                step_name="intent_router",
+                tool_name="intent_router",
+                provider=_configured_provider(),
+                status="failed",
                 attempt=1,
                 fallback_used=False,
                 error_message=str(exc),
@@ -204,7 +246,7 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         tool_name="intent_router",
         provider=_result_provider(intent_result),
         status="success",
-        attempt=intent_result.get("attempts", 1),
+        attempt=_result_attempt(intent_result),
         fallback_used=_result_fallback_used(intent_result),
         error_message=None,
     )
@@ -283,7 +325,7 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         tool_name="issue_extraction",
         provider=_result_provider(issue_result),
         status="success",
-        attempt=issue_result.get("attempts", 1),
+        attempt=_result_attempt(issue_result),
         fallback_used=_result_fallback_used(issue_result),
         error_message=None,
     )
@@ -331,7 +373,31 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         return workflow_run
 
     first_issue = issues[0]
+    memory_query = " ".join(
+        value
+        for value in [
+            first_issue.get("title"),
+            first_issue.get("description"),
+        ]
+        if isinstance(value, str)
+    )
+    memory_matches = [
+        memory_item
+        for memory_item in search_memory(
+            db,
+            category=first_issue.get("category", ""),
+            query=memory_query,
+            limit=5,
+        )
+        if memory_item.workflow_run_id != workflow_run.id
+    ]
     generated_ticket = generate_ticket(first_issue)
+    memory_evidence = _memory_source_evidence(memory_matches)
+    if memory_matches:
+        generated_ticket["priority"] = _increase_priority_for_memory(
+            generated_ticket.get("priority", "medium")
+        )
+
     reply_result = generate_customer_reply(first_issue)
     evaluation_result = evaluate_workflow_output(
         issue=first_issue,
@@ -346,7 +412,7 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         tool_name="ticket_generation",
         provider=_result_provider(generated_ticket),
         status="success",
-        attempt=generated_ticket.get("attempts", 1),
+        attempt=_result_attempt(generated_ticket),
         fallback_used=_result_fallback_used(generated_ticket),
         error_message=None,
     )
@@ -356,7 +422,7 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         tool_name="reply_generation",
         provider=_result_provider(reply_result),
         status="success",
-        attempt=reply_result.get("attempts", 1),
+        attempt=_result_attempt(reply_result),
         fallback_used=_result_fallback_used(reply_result),
         error_message=None,
     )
@@ -376,7 +442,11 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         category=generated_ticket["category"],
         description=generated_ticket["description"],
         acceptance_criteria="\n".join(generated_ticket["acceptance_criteria"]),
-        source_evidence=first_issue["description"],
+        source_evidence="\n".join(
+            evidence
+            for evidence in [first_issue["description"], memory_evidence]
+            if evidence
+        ),
         requires_approval=True,
         status="draft",
     )
@@ -400,6 +470,10 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
         tool_calls=[
             _tool_call_payload(tool_call)
             for tool_call in starter_tool_calls
+        ],
+        memory_matches=[
+            _memory_payload(memory_item)
+            for memory_item in memory_matches
         ],
     )
 
@@ -427,6 +501,13 @@ def create_workflow_run(payload: WorkflowRunCreate, db: Session = Depends(get_db
     db.add(reply)
     db.add(founder_summary)
     db.add(evaluation)
+    save_memory_from_workflow(
+        db,
+        workflow_run_id=workflow_run.id,
+        ticket=generated_ticket,
+        reply=reply_result,
+        evaluation=evaluation_result,
+    )
 
     workflow_run.status = "completed"
 
@@ -480,6 +561,43 @@ def get_workflow_tool_calls(workflow_run_id: int, db: Session = Depends(get_db))
         db.query(ToolCall)
         .filter(ToolCall.workflow_run_id == workflow_run_id)
         .order_by(ToolCall.id.asc())
+        .all()
+    )
+
+
+@router.get("/{workflow_run_id}/memory", response_model=list[MemoryItemResponse])
+def get_workflow_memory(workflow_run_id: int, db: Session = Depends(get_db)):
+    workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+
+    if not workflow_run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+
+    ticket = db.query(Ticket).filter(Ticket.workflow_run_id == workflow_run_id).first()
+    reply = db.query(CustomerReply).filter(CustomerReply.workflow_run_id == workflow_run_id).first()
+
+    if ticket:
+        query = " ".join(
+            value
+            for value in [ticket.title, ticket.description, reply.issue if reply else None]
+            if isinstance(value, str)
+        )
+        related_items = [
+            memory_item
+            for memory_item in search_memory(
+                db,
+                category=ticket.category or "",
+                query=query,
+                limit=5,
+            )
+            if memory_item.workflow_run_id != workflow_run_id
+        ]
+        if related_items:
+            return related_items
+
+    return (
+        db.query(MemoryItem)
+        .filter(MemoryItem.workflow_run_id == workflow_run_id)
+        .order_by(MemoryItem.created_at.desc())
         .all()
     )
 

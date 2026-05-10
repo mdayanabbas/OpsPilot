@@ -25,3 +25,4 @@ class WorkflowRun(Base):
     founder_summary = relationship("FounderSummary", back_populates="workflow_run", uselist=False, cascade="all, delete-orphan")
     evaluation_result = relationship("EvaluationResult", back_populates="workflow_run", uselist=False, cascade="all, delete-orphan")
     approval_decisions = relationship("ApprovalDecision", back_populates="workflow_run", cascade="all, delete-orphan")
+    memory_items = relationship("MemoryItem", back_populates="workflow_run", cascade="all, delete-orphan")

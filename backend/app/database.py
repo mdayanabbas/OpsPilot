@@ -35,6 +35,12 @@ def ensure_database_schema():
                 )
             )
 
+    if "attempt" in tool_call_columns:
+        with engine.begin() as connection:
+            connection.execute(
+                text("UPDATE tool_calls SET attempt = 1 WHERE attempt < 1")
+            )
+
 
 def get_db():
     db = SessionLocal()

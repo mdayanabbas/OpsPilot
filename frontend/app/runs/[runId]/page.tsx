@@ -69,6 +69,16 @@ type FounderSummary = {
   recommended_actions: string | null;
 };
 
+type MemoryItem = {
+  id: number;
+  workflow_run_id: number;
+  item_type: string;
+  title: string;
+  category: string | null;
+  content: string;
+  created_at: string;
+};
+
 type WorkflowOutputs = {
   workflow_run: WorkflowRun;
   tickets: Ticket[];
@@ -314,10 +324,11 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls] = await Promise.all([
+  const [workflow, outputs, toolCalls, memoryItems] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
+    fetchJson<MemoryItem[]>(`/api/v1/workflows/${runId}/memory`),
   ]);
 
   const ticket = outputs.tickets[0];
@@ -332,6 +343,7 @@ export default async function WorkflowRunDetailsPage({
   ).length;
   const primaryProvider = providerSummary(toolCalls);
   const health = executionHealth(workflow, failedToolCalls, fallbackUsed, successfulRecoveries);
+  const memoryInfluencedRun = memoryItems.some((memoryItem) => memoryItem.workflow_run_id !== workflow.id);
   const humanReviewRequired = Boolean(evaluation?.requires_human_review || reply?.requires_approval);
 
   return (
@@ -681,6 +693,54 @@ export default async function WorkflowRunDetailsPage({
                 </div>
               ) : (
                 <EmptyState>No founder summary recorded for this run.</EmptyState>
+              )}
+            </Panel>
+
+            <Panel
+              title="Memory"
+              eyebrow={memoryInfluencedRun ? "Memory influenced this run" : "Similar Past Issues"}
+            >
+              {memoryItems.length > 0 ? (
+                <div className="space-y-4">
+                  {memoryInfluencedRun ? (
+                    <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4">
+                      <Badge tone="recovered">Memory influenced this run</Badge>
+                      <p className="mt-3 text-sm leading-6 text-amber-50/90">
+                        Similar past issues were found before ticket generation, so OpsPilot raised recurrence risk and may have increased ticket priority.
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {memoryItems.map((memoryItem) => (
+                      <div
+                        key={memoryItem.id}
+                        className="rounded-3xl border border-white/10 bg-[#090d16] p-5 shadow-xl shadow-black/15"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                              Source Run #{memoryItem.workflow_run_id}
+                            </p>
+                            <h3 className="mt-2 text-base font-semibold tracking-tight text-white">
+                              {memoryItem.title}
+                            </h3>
+                          </div>
+                          <Badge tone="default">{memoryItem.category ?? "uncategorized"}</Badge>
+                        </div>
+
+                        <p className="mt-4 text-sm leading-6 text-slate-400">{memoryItem.content}</p>
+
+                        <div className="mt-5 flex flex-wrap items-center gap-2">
+                          <Badge tone="default">{titleize(memoryItem.item_type)}</Badge>
+                          <span className="text-xs text-slate-500">{dateTime(memoryItem.created_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <EmptyState>No similar past issues have been stored yet.</EmptyState>
               )}
             </Panel>
 

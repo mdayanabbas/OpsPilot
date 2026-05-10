@@ -63,7 +63,7 @@ def _normalize_intent(raw_intent: dict) -> dict:
 def detect_workflow_intent(input_text: str) -> dict:
     if not isinstance(input_text, str) or not input_text.strip():
         intent = _fallback_intent("Input text is empty or invalid.")
-        intent["attempts"] = 0
+        intent["attempts"] = 1
         return intent
 
     prompt = f"""

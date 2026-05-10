@@ -76,7 +76,7 @@ def _fallback_ticket(issue: dict) -> dict:
             "Identify the likely root cause.",
             "Confirm the fix or next action with supporting evidence.",
         ],
-        "attempts": 0,
+        "attempts": 1,
         "fallback_used": True,
         "provider": "fallback",
     }

@@ -18,12 +18,20 @@ type BenchmarkResult = {
 };
 
 type BenchmarkRun = {
+  id: number;
   total_cases: number;
   passed_cases: number;
   failed_cases: number;
   pass_rate: number;
   average_quality_score: number;
   results: BenchmarkResult[];
+};
+
+type BenchmarkHistoryItem = {
+  id: number;
+  pass_rate: number;
+  average_quality_score: number;
+  created_at: string;
 };
 
 const API_BASE_URL = "http://localhost:8000";
@@ -41,6 +49,19 @@ function percent(value: number | null | undefined) {
 
 function titleize(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function dateTime(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function signedPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return "n/a";
+  const rounded = Math.round(value * 100);
+  return `${rounded > 0 ? "+" : ""}${rounded}%`;
 }
 
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: "success" | "danger" | "warning" | "default" }) {
@@ -81,11 +102,19 @@ export default function BenchmarksPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [runResult, setRunResult] = useState<BenchmarkRun | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [history, setHistory] = useState<BenchmarkHistoryItem[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
   const categories = useMemo(
     () => Array.from(new Set(cases.map((benchmarkCase) => benchmarkCase.category))).sort(),
     [cases],
   );
+
+  const latestRun = history[0] ?? null;
+  const previousRun = history[1] ?? null;
+  const passRateImprovement = latestRun && previousRun ? latestRun.pass_rate - previousRun.pass_rate : null;
+  const qualityTrend = latestRun && previousRun ? latestRun.average_quality_score - previousRun.average_quality_score : null;
 
   useEffect(() => {
     async function loadCases() {
@@ -110,6 +139,29 @@ export default function BenchmarksPage() {
     loadCases();
   }, []);
 
+  async function loadHistory() {
+    setIsLoadingHistory(true);
+    setHistoryError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/benchmarks/history`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load benchmark history: ${response.status}`);
+      }
+
+      setHistory((await response.json()) as BenchmarkHistoryItem[]);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : "Failed to load benchmark history.");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
   async function runBenchmark() {
     setIsRunning(true);
     setRunError(null);
@@ -125,6 +177,7 @@ export default function BenchmarksPage() {
       }
 
       setRunResult((await response.json()) as BenchmarkRun);
+      await loadHistory();
     } catch (error) {
       setRunError(error instanceof Error ? error.message : "Benchmark run failed.");
     } finally {
@@ -227,6 +280,68 @@ export default function BenchmarksPage() {
               <MetricCard label="Categories Covered" value={String(categories.length)} />
               <MetricCard label="Last Pass Rate" value={runResult ? percent(runResult.pass_rate) : "Not run"} tone={runResult && runResult.failed_cases > 0 ? "warning" : "default"} />
               <MetricCard label="Failed Cases" value={runResult ? String(runResult.failed_cases) : "Not run"} tone={runResult?.failed_cases ? "danger" : "success"} />
+            </section>
+
+            <section className="rounded-3xl border border-white/10 bg-slate-950/55 shadow-2xl shadow-black/25 backdrop-blur-xl">
+              <div className="border-b border-white/10 px-6 py-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Benchmark History</p>
+                <h2 className="mt-1 text-lg font-semibold tracking-tight text-white">Run Trends</h2>
+              </div>
+
+              <div className="p-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <MetricCard
+                    label="Latest Pass Rate"
+                    value={latestRun ? percent(latestRun.pass_rate) : isLoadingHistory ? "..." : "No runs"}
+                    tone={latestRun && latestRun.pass_rate >= 0.8 ? "success" : latestRun ? "warning" : "default"}
+                  />
+                  <MetricCard
+                    label="Improvement"
+                    value={signedPercent(passRateImprovement)}
+                    tone={passRateImprovement === null ? "default" : passRateImprovement >= 0 ? "success" : "danger"}
+                  />
+                  <MetricCard
+                    label="Avg Quality Trend"
+                    value={signedPercent(qualityTrend)}
+                    tone={qualityTrend === null ? "default" : qualityTrend >= 0 ? "success" : "warning"}
+                  />
+                </div>
+
+                {historyError ? (
+                  <div className="mt-5 rounded-2xl border border-rose-400/25 bg-rose-400/10 p-4 text-sm text-rose-200">
+                    {historyError}
+                  </div>
+                ) : null}
+
+                <div className="mt-5 space-y-3">
+                  {isLoadingHistory ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-slate-400">
+                      Loading benchmark history...
+                    </div>
+                  ) : history.length > 0 ? (
+                    history.map((historyItem) => (
+                      <div
+                        key={historyItem.id}
+                        className="grid gap-4 rounded-3xl border border-white/10 bg-black/20 p-4 shadow-xl shadow-black/10 md:grid-cols-[0.5fr_0.5fr_0.6fr_1fr] md:items-center"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-white">Run #{historyItem.id}</p>
+                          <p className="mt-1 text-xs text-slate-500">Benchmark run</p>
+                        </div>
+                        <Badge tone={historyItem.pass_rate >= 0.8 ? "success" : "warning"}>
+                          {percent(historyItem.pass_rate)} pass
+                        </Badge>
+                        <p className="text-sm font-semibold text-slate-200">{percent(historyItem.average_quality_score)} quality</p>
+                        <p className="text-sm text-slate-500">{dateTime(historyItem.created_at)}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/12 bg-white/[0.025] p-6 text-sm leading-6 text-slate-400">
+                      No benchmark runs have been recorded yet.
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
 
             <section className="rounded-3xl border border-white/10 bg-slate-950/55 shadow-2xl shadow-black/25 backdrop-blur-xl">

@@ -80,12 +80,26 @@ def _numbered_actions(actions: list[str]) -> str:
     return "\n".join(f"{index}. {action}" for index, action in enumerate(actions, start=1))
 
 
+def _source_workflow_ids(memory_matches: list[dict] | None) -> list[int]:
+    if not memory_matches:
+        return []
+
+    workflow_ids = []
+    for memory_match in memory_matches:
+        workflow_id = memory_match.get("workflow_run_id")
+        if isinstance(workflow_id, int) and workflow_id not in workflow_ids:
+            workflow_ids.append(workflow_id)
+
+    return workflow_ids
+
+
 def generate_founder_summary(
     issue: dict,
     ticket: dict,
     reply: dict,
     evaluation: dict,
     tool_calls: list[dict] | None = None,
+    memory_matches: list[dict] | None = None,
 ) -> dict:
     category = _clean_text(issue.get("category"), _clean_text(ticket.get("category"), "unknown"))
     customer = _clean_text(issue.get("customer") or reply.get("customer"), "unknown customer")
@@ -98,10 +112,25 @@ def generate_founder_summary(
     fallback_used = _fallback_used(tool_calls, reply)
     provider_note = _provider_note(tool_calls, fallback_used)
 
+    memory_count = len(memory_matches or [])
+    source_workflow_ids = _source_workflow_ids(memory_matches)
+    source_workflow_note = (
+        f" from workflow #{source_workflow_ids[0]}"
+        if len(source_workflow_ids) == 1
+        else f" from workflows {', '.join(f'#{workflow_id}' for workflow_id in source_workflow_ids)}"
+        if source_workflow_ids
+        else ""
+    )
+    memory_note = (
+        f"{memory_count} similar past issue{'s' if memory_count != 1 else ''}{source_workflow_note} were found, increasing recurrence risk and priority"
+        if memory_count
+        else "no related past issues were found"
+    )
+
     summary = (
         f"OpsPilot detected a {category} issue for {customer}. "
         f"The generated ticket is {priority} priority, human review required: "
-        f"{_yes_no(human_review_required)}, and {provider_note}."
+        f"{_yes_no(human_review_required)}, {provider_note}, and {memory_note}."
     )
 
     risks = []
@@ -120,6 +149,12 @@ def generate_founder_summary(
     if evaluation_risks:
         risks.append(evaluation_risks)
 
+    if memory_count:
+        risks.append(
+            "Memory increased priority/risk because similar past issues "
+            f"{source_workflow_note.strip()} indicate this may be recurring rather than isolated."
+        )
+
     if not risks:
         risks.append("No major business or provider execution risks were detected.")
 
@@ -134,6 +169,9 @@ def generate_founder_summary(
 
     if fallback_used:
         actions.append("Spot-check the fallback/local provider output for accuracy before relying on it.")
+
+    if memory_count:
+        actions.append("Compare against the similar past issue workflows before final prioritization.")
 
     if len(actions) < 5:
         actions.append("Track the run outcome and update the customer once the next step is confirmed.")

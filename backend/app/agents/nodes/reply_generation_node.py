@@ -127,7 +127,7 @@ def _normalize_reply(raw_reply: dict, issue: dict) -> dict:
 def generate_customer_reply(issue: dict) -> dict:
     if not isinstance(issue, dict):
         fallback = _fallback_reply({})
-        fallback["attempts"] = 0
+        fallback["attempts"] = 1
         return fallback
 
     prompt_issue = {

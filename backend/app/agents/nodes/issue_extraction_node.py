@@ -164,7 +164,7 @@ ISSUE_EXTRACTION_RESPONSE_SCHEMA = {
 
 
 def _empty_issues() -> dict:
-    return {"issues": [], "attempts": 0, "fallback_used": False, "provider": "fallback"}
+    return {"issues": [], "attempts": 1, "fallback_used": False, "provider": "fallback"}
 
 
 def _is_actionable_text(text: str) -> bool:
