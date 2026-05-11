@@ -8,6 +8,7 @@ from app.models.incident import Incident
 from app.models.reply import CustomerReply
 from app.models.ticket import Ticket
 from app.models.workflow import WorkflowRun
+from app.services.email_alert_service import send_incident_alert
 
 THEME_RULES = [
     ("unpaid invoice", ("unpaid", "invoice")),
@@ -20,6 +21,12 @@ THEME_RULES = [
     ("timeout", ("timeout",)),
     ("refund request", ("refund",)),
 ]
+
+SEVERITY_RANK = {
+    "medium": 1,
+    "high": 2,
+    "critical": 3,
+}
 
 
 def _severity(workflow_count: int) -> str:
@@ -197,23 +204,28 @@ def detect_incidents(db: Session) -> Incident | None:
             f"{workflow_count} {category} workflow runs were detected in the last 30 minutes. "
             f"Related workflow IDs: {', '.join(str(workflow_id) for workflow_id in workflow_ids)}."
         )
+        severity = _severity(workflow_count)
         intelligence = generate_incident_intelligence(category, tickets, replies_by_workflow)
+        alert_reason = None
 
         if incident:
+            previous_severity = incident.severity
             incident.title = title
             incident.description = description
-            incident.severity = _severity(workflow_count)
+            incident.severity = severity
             incident.workflow_count = workflow_count
             incident.root_cause_summary = json.dumps(intelligence["root_cause_clusters"])
             incident.operational_risks = json.dumps(intelligence["operational_risks"])
             incident.recommended_actions = json.dumps(intelligence["recommended_actions"])
             incident.last_detected_at = now
+            if SEVERITY_RANK.get(severity, 0) > SEVERITY_RANK.get(previous_severity, 0):
+                alert_reason = "severity_changed"
         else:
             incident = Incident(
                 category=category,
                 title=title,
                 description=description,
-                severity=_severity(workflow_count),
+                severity=severity,
                 workflow_count=workflow_count,
                 root_cause_summary=json.dumps(intelligence["root_cause_clusters"]),
                 operational_risks=json.dumps(intelligence["operational_risks"]),
@@ -223,6 +235,15 @@ def detect_incidents(db: Session) -> Incident | None:
                 status="active",
             )
             db.add(incident)
+            alert_reason = "created"
+
+        if alert_reason:
+            send_incident_alert(
+                incident=incident,
+                intelligence=intelligence,
+                related_workflow_ids=workflow_ids,
+                reason=alert_reason,
+            )
 
         detected_incident = incident
 

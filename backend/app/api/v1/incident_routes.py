@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.incident import Incident
+from app.services.email_alert_service import get_alert_status
 from app.services.incident_service import related_workflow_ids_for_incident
 
 router = APIRouter()
@@ -20,6 +21,11 @@ def _json_field(value: str | None, default):
         return default
 
     return parsed if isinstance(parsed, type(default)) else default
+
+
+@router.get("/alerts/status")
+def incident_alert_status():
+    return get_alert_status()
 
 
 @router.get("")
