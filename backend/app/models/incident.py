@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -17,6 +18,11 @@ class Incident(Base):
     root_cause_summary = Column(Text, nullable=True)
     operational_risks = Column(Text, nullable=True)
     recommended_actions = Column(Text, nullable=True)
+    playbook_steps = Column(Text, nullable=True)
     first_detected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_detected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    status = Column(String(50), nullable=False, default="active")
+    status = Column(String(50), nullable=False, default="open")
+    owner = Column(String(255), nullable=True)
+    resolution_notes = Column(Text, nullable=True)
+
+    alerts = relationship("IncidentAlert", back_populates="incident", cascade="all, delete-orphan")

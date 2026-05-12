@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.founder_summary_node import generate_founder_summary
 from app.agents.nodes.intent_router_node import detect_workflow_intent
-from app.agents.nodes.issue_extraction_node import extract_issues
+from app.agents.nodes.issue_extraction_node import extract_issues, normalize_issue_category
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
 from app.config import LLM_PROVIDER
@@ -415,6 +415,26 @@ def _execute_workflow_run_sync(
         if memory_item.workflow_run_id != workflow_run.id
     ]
     generated_ticket = generate_ticket(first_issue)
+    ticket_category_text = " ".join(
+        value
+        for value in [
+            payload.input_text,
+            first_issue.get("title"),
+            first_issue.get("description"),
+            generated_ticket.get("title"),
+            generated_ticket.get("description"),
+        ]
+        if isinstance(value, str)
+    )
+    normalized_ticket_category = normalize_issue_category(
+        ticket_category_text,
+        generated_ticket.get("category"),
+    )
+    if normalized_ticket_category != generated_ticket.get("category"):
+        generated_ticket["category"] = normalized_ticket_category
+        if normalized_ticket_category == "auth":
+            generated_ticket["team"] = "backend"
+
     memory_evidence = _memory_source_evidence(memory_matches)
     if memory_matches:
         generated_ticket["priority"] = _increase_priority_for_memory(

@@ -52,6 +52,13 @@ def ensure_database_schema():
                 connection.execute(text("ALTER TABLE incidents ADD COLUMN operational_risks TEXT"))
             if "recommended_actions" not in incident_columns:
                 connection.execute(text("ALTER TABLE incidents ADD COLUMN recommended_actions TEXT"))
+            if "playbook_steps" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN playbook_steps TEXT"))
+            if "owner" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN owner VARCHAR(255)"))
+            if "resolution_notes" not in incident_columns:
+                connection.execute(text("ALTER TABLE incidents ADD COLUMN resolution_notes TEXT"))
+            connection.execute(text("UPDATE incidents SET status = 'open' WHERE status = 'active'"))
 
 
 def get_db():

@@ -3,6 +3,8 @@ import smtplib
 from email.message import EmailMessage
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from app.config import (
     ALERT_EMAIL_ENABLED,
     ALERT_EMAIL_FROM,
@@ -12,6 +14,7 @@ from app.config import (
     SMTP_HOST,
     SMTP_PORT,
 )
+from app.models.incident_alert import IncidentAlert
 from app.models.incident import Incident
 
 
@@ -177,14 +180,16 @@ def send_incident_alert(
     intelligence: dict,
     related_workflow_ids: list[int],
     reason: str,
+    db: Session | None = None,
 ) -> bool:
     if not _is_configured():
         return False
 
     print("[alert_service] sending incident alert")
 
+    subject = f"[OpsPilot] {incident.severity.upper()} {incident.category} incident alert"
     message = EmailMessage()
-    message["Subject"] = f"[OpsPilot] {incident.severity.upper()} {incident.category} incident alert"
+    message["Subject"] = subject
     message["From"] = ALERT_EMAIL_FROM
     message["To"] = ALERT_EMAIL_TO
     message.set_content(_plain_text(incident, intelligence, related_workflow_ids, reason))
@@ -203,4 +208,14 @@ def send_incident_alert(
         return False
 
     print("[alert_service] alert sent successfully")
+    if db is not None:
+        db.add(
+            IncidentAlert(
+                incident_id=incident.id,
+                alert_type=reason,
+                severity=incident.severity,
+                recipient=ALERT_EMAIL_TO,
+                subject=subject,
+            )
+        )
     return True

@@ -1,15 +1,21 @@
+import re
+
 from app.services.gemini_service import GeminiServiceError, generate_json
 
 
 ISSUE_CATEGORIES = {"billing", "auth", "ui", "performance", "other"}
 ISSUE_SEVERITIES = {"low", "medium", "high"}
 ACTIONABLE_PROBLEM_TERMS = {
+    "account access",
+    "auth",
+    "authentication",
     "broken",
     "cannot",
     "can't",
     "charge",
     "charged",
     "crash",
+    "credentials",
     "disabled",
     "error",
     "fail",
@@ -22,35 +28,60 @@ ACTIONABLE_PROBLEM_TERMS = {
     "load",
     "loading",
     "locked out",
+    "login",
     "not updating",
     "overlaps",
+    "password",
     "problem",
     "refund",
+    "session",
+    "sign in",
+    "sign-in",
     "slow",
     "stuck",
     "timeout",
     "unpaid",
 }
 AUTH_PRIORITY_KEYWORDS = {
+    "account access",
+    "authentication",
     "cannot access",
     "can't access",
     "cannot login",
     "can't login",
+    "credentials",
+    "login",
     "login failed",
     "login fails",
+    "password",
     "password reset",
     "password reset failed",
     "password reset fails",
+    "session",
+    "sign in",
+    "sign-in",
     "locked account",
     "account locked",
     "locked out",
-    "account access",
     "2fa failed",
     "2fa fails",
     "2fa",
     "authentication failed",
     "authentication fails",
 }
+AUTH_NORMALIZATION_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\blogin\b",
+        r"\bpassword\b",
+        r"\bcredentials\b",
+        r"\bsession\b",
+        r"\bauthentication\b",
+        r"\bauth\b",
+        r"\bsign[\s-]in\b",
+        r"\baccount access\b",
+    )
+)
 UI_PRIORITY_KEYWORDS = {
     "button",
     "screen",
@@ -172,12 +203,41 @@ def _is_actionable_text(text: str) -> bool:
     return any(term in lowered for term in ACTIONABLE_PROBLEM_TERMS)
 
 
+def _contains_auth_normalization_signal(text: str) -> bool:
+    return any(pattern.search(text) for pattern in AUTH_NORMALIZATION_PATTERNS)
+
+
+def normalize_issue_category(text: str, current_category: str | None) -> str:
+    category = current_category if current_category in ISSUE_CATEGORIES else "other"
+    normalized_text = text if isinstance(text, str) else ""
+
+    if _contains_auth_normalization_signal(normalized_text):
+        if category != "auth":
+            print(f"[issue_extraction] normalized category from {category} -> auth")
+        return "auth"
+
+    return category
+
+
 def _infer_category(text: str, fallback: str) -> str:
     lowered = text.lower()
 
-    # Very explicit UI phrases should win first.
+    # Auth/login issues should aggregate consistently for incident detection.
+    if _contains_auth_normalization_signal(text) or any(
+        keyword in lowered for keyword in AUTH_PRIORITY_KEYWORDS
+    ):
+        return "auth"
+
+    # Performance complaints should not be dropped or misclassified.
+    if any(keyword in lowered for keyword in PERFORMANCE_PRIORITY_KEYWORDS):
+        return "performance"
+
+    # Billing/payment issues.
+    if any(keyword in lowered for keyword in BILLING_CORE_KEYWORDS):
+        return "billing"
+
+    # Very explicit UI phrases should win after auth/billing/performance checks.
     explicit_ui_phrases = {
-        "login button",
         "signup button",
         "submit button",
         "button is broken",
@@ -194,18 +254,6 @@ def _infer_category(text: str, fallback: str) -> str:
 
     if any(keyword in lowered for keyword in explicit_ui_phrases):
         return "ui"
-
-    # Auth should win when the problem is access/authentication, not just the word "login".
-    if any(keyword in lowered for keyword in AUTH_PRIORITY_KEYWORDS):
-        return "auth"
-
-    # Performance complaints should not be dropped or misclassified.
-    if any(keyword in lowered for keyword in PERFORMANCE_PRIORITY_KEYWORDS):
-        return "performance"
-
-    # Billing/payment issues.
-    if any(keyword in lowered for keyword in BILLING_CORE_KEYWORDS):
-        return "billing"
 
     # Generic UI terms come later to avoid "account page" beating auth.
     generic_ui_keywords = {
@@ -242,10 +290,10 @@ def _normalize_issue(raw_issue: dict, input_text: str) -> dict | None:
     if not isinstance(description, str) or not description.strip():
         return None
 
-    category = _infer_category(
-        f"{input_text} {title} {description}",
-        raw_issue.get("category"),
-    )
+    category_text = f"{input_text} {title} {description}"
+    category = normalize_issue_category(category_text, raw_issue.get("category"))
+    if category != "auth":
+        category = _infer_category(category_text, raw_issue.get("category"))
 
     severity = raw_issue.get("severity")
     if severity not in ISSUE_SEVERITIES:
@@ -308,12 +356,11 @@ Allowed categories:
 - other
 
 Category rules:
-- ui wins when the issue is about a UI element such as button, page, modal, dropdown, form, layout, or screen
-- if the phrase includes "login button", classify as ui
-- auth wins over billing only when the user cannot access an account, authentication fails, password reset fails, 2fa fails, or account is locked
+- auth wins when the text contains login, password, credentials, session, authentication, auth, sign in, sign-in, or account access
 - billing wins only when the core issue is payment, invoice, refund, charge, subscription, or checkout
+- ui wins when the issue is about a UI element such as button, page, modal, dropdown, form, layout, or screen and there is no auth/login signal
 - billing: invoice, payment, checkout, purchase, subscription, refund, card, charge, billing, paid, unpaid
-- auth: login, signup, password, account access, locked out, authentication, 2fa, reset
+- auth: login, signup, password, credentials, session, sign in, sign-in, account access, locked out, authentication, auth, 2fa, reset
 - ui: button, page, screen, layout, visual, modal, form, dropdown
 - performance: slow, lag, timeout, loading, latency, crash, freeze, dashboard slow, page slow, API timeout
 - do not classify performance complaints as no-actionable issues
@@ -328,7 +375,7 @@ Examples:
 - "John purchased the product" -> {{"issues": []}}
 - "Invoice still unpaid after successful payment" -> billing
 - "Cannot login after password reset" -> auth
-- "Login button is broken" -> ui
+- "Login button is broken" -> auth
 - "Dashboard loads slowly" -> performance
 - "User cannot login after password reset" -> auth
 - "Account locked after payment update" -> auth

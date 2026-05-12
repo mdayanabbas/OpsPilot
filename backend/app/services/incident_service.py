@@ -29,6 +29,37 @@ SEVERITY_RANK = {
 }
 
 
+def generate_playbook_steps(category: str) -> list[str]:
+    if category == "billing":
+        return [
+            "Inspect payment webhook logs for delivery or processing failures.",
+            "Verify invoice synchronization between billing provider and OpsPilot records.",
+            "Audit subscription activation and entitlement update flow.",
+            "Identify affected customers and prepare billing support guidance.",
+        ]
+    if category == "auth":
+        return [
+            "Inspect authentication service health and recent error rates.",
+            "Review password reset email delivery and token verification pipeline.",
+            "Check recent auth-related releases or configuration changes.",
+            "Prepare customer-facing access recovery instructions.",
+        ]
+    if category == "performance":
+        return [
+            "Inspect latency metrics for affected pages and APIs.",
+            "Review infrastructure load, database latency, and timeout rates.",
+            "Check upstream dependency health and recent deploys.",
+            "Confirm mitigation status with fresh workflow samples.",
+        ]
+
+    return [
+        "Review the latest affected workflows and identify the common failure path.",
+        "Assign an operational owner for investigation and customer messaging.",
+        "Check recent releases, dependency changes, and support volume around this category.",
+        "Prepare a concise incident update with scope, next action, and checkpoint time.",
+    ]
+
+
 def _severity(workflow_count: int) -> str:
     if workflow_count >= 8:
         return "critical"
@@ -195,7 +226,7 @@ def detect_incidents(db: Session) -> Incident | None:
             db.query(Incident)
             .filter(
                 Incident.category == category,
-                Incident.status == "active",
+                Incident.status.in_(["open", "investigating", "mitigated", "active"]),
             )
             .first()
         )
@@ -206,9 +237,12 @@ def detect_incidents(db: Session) -> Incident | None:
         )
         severity = _severity(workflow_count)
         intelligence = generate_incident_intelligence(category, tickets, replies_by_workflow)
+        playbook_steps = generate_playbook_steps(category)
         alert_reason = None
 
         if incident:
+            if incident.status == "active":
+                incident.status = "open"
             previous_severity = incident.severity
             incident.title = title
             incident.description = description
@@ -217,6 +251,7 @@ def detect_incidents(db: Session) -> Incident | None:
             incident.root_cause_summary = json.dumps(intelligence["root_cause_clusters"])
             incident.operational_risks = json.dumps(intelligence["operational_risks"])
             incident.recommended_actions = json.dumps(intelligence["recommended_actions"])
+            incident.playbook_steps = json.dumps(playbook_steps)
             incident.last_detected_at = now
             if SEVERITY_RANK.get(severity, 0) > SEVERITY_RANK.get(previous_severity, 0):
                 alert_reason = "severity_changed"
@@ -230,19 +265,22 @@ def detect_incidents(db: Session) -> Incident | None:
                 root_cause_summary=json.dumps(intelligence["root_cause_clusters"]),
                 operational_risks=json.dumps(intelligence["operational_risks"]),
                 recommended_actions=json.dumps(intelligence["recommended_actions"]),
+                playbook_steps=json.dumps(playbook_steps),
                 first_detected_at=now,
                 last_detected_at=now,
-                status="active",
+                status="open",
             )
             db.add(incident)
             alert_reason = "created"
 
         if alert_reason:
+            db.flush()
             send_incident_alert(
                 incident=incident,
                 intelligence=intelligence,
                 related_workflow_ids=workflow_ids,
                 reason=alert_reason,
+                db=db,
             )
 
         detected_incident = incident
