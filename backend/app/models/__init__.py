@@ -10,6 +10,7 @@ from app.models.memory import MemoryItem
 from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 from app.models.processed_email import ProcessedEmail
 from app.models.incident import Incident
+from app.models.planner_decision import PlannerDecision
 
 __all__ = [
     "WorkflowRun",
@@ -25,4 +26,5 @@ __all__ = [
     "BenchmarkCaseResult",
     "ProcessedEmail",
     "Incident",
+    "PlannerDecision",
 ]

@@ -80,6 +80,22 @@ type MemoryItem = {
   created_at: string;
 };
 
+type PlannerTool = {
+  tool_name: string;
+  reason: string;
+  priority: "low" | "medium" | "high" | string;
+};
+
+type PlannerDecision = {
+  id: number;
+  workflow_run_id: number;
+  plan_type: string;
+  next_tools: PlannerTool[];
+  requires_human_approval: boolean;
+  reasoning_summary: string;
+  created_at: string;
+};
+
 type WorkflowOutputs = {
   workflow_run: WorkflowRun;
   tickets: Ticket[];
@@ -93,6 +109,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 const TIMELINE_STEPS = [
   ["intent_router", "Intent", "Classify workflow"],
   ["issue_extraction", "Extract", "Extract structured issue"],
+  ["planner", "Planner", "Choose next tools"],
   ["ticket_generation", "Ticket", "Create engineering task"],
   ["reply_generation", "Reply", "Draft customer response"],
   ["evaluation", "Evaluate", "Score quality and risk"],
@@ -109,6 +126,20 @@ const NAV_ITEMS = [
 
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function fetchOptionalJson<T>(path: string): Promise<T | null> {
+  const response = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+
+  if (response.status === 404) {
+    return null;
+  }
 
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status} ${response.statusText}`);
@@ -203,6 +234,10 @@ function metricToneClass(tone: string = "default") {
 }
 
 function providerLabel(provider: string | null | undefined, fallbackUsed = false) {
+  if (provider === "deterministic") {
+    return "Deterministic";
+  }
+
   if (provider === "local" || provider === "fallback" || fallbackUsed) {
     return "LM Studio";
   }
@@ -327,11 +362,12 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls, memoryItems] = await Promise.all([
+  const [workflow, outputs, toolCalls, memoryItems, plannerDecision] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
     fetchJson<MemoryItem[]>(`/api/v1/workflows/${runId}/memory`),
+    fetchOptionalJson<PlannerDecision>(`/api/v1/workflows/${runId}/planner`),
   ]);
 
   const ticket = outputs.tickets[0];
@@ -508,8 +544,59 @@ export default async function WorkflowRunDetailsPage({
               </div>
             </Panel>
 
+            <Panel title="Planner Decision" eyebrow="Agent orchestration">
+              {plannerDecision ? (
+                <div className="space-y-5">
+                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr]">
+                    <MetricTile label="Plan Type" value={titleize(plannerDecision.plan_type)} />
+                    <MetricTile
+                      label="Human Approval"
+                      value={plannerDecision.requires_human_approval ? "Required" : "Not required"}
+                      tone={plannerDecision.requires_human_approval ? "medium" : "healthy"}
+                    />
+                    <MetricTile
+                      label="Planned Tools"
+                      value={String(plannerDecision.next_tools.length)}
+                      hint={dateTime(plannerDecision.created_at)}
+                    />
+                  </div>
+
+                  <div className="rounded-3xl border border-sky-300/15 bg-sky-300/[0.055] p-5 shadow-xl shadow-sky-950/15">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-200/70">Reasoning Summary</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-200">{plannerDecision.reasoning_summary}</p>
+                  </div>
+
+                  {plannerDecision.next_tools.length > 0 ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {plannerDecision.next_tools.map((tool) => (
+                        <div
+                          key={`${plannerDecision.id}-${tool.tool_name}`}
+                          className="rounded-3xl border border-white/10 bg-[#090d16] p-5 shadow-xl shadow-black/15"
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Next Tool</p>
+                              <h3 className="mt-2 text-base font-semibold tracking-tight text-white">
+                                {logicalToolLabel(tool.tool_name)}
+                              </h3>
+                            </div>
+                            <Badge tone={tool.priority}>{tool.priority}</Badge>
+                          </div>
+                          <p className="mt-4 text-sm leading-6 text-slate-400">{tool.reason}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState>No tools were planned because the workflow needs clarification first.</EmptyState>
+                  )}
+                </div>
+              ) : (
+                <EmptyState>No planner decision has been recorded for this run yet.</EmptyState>
+              )}
+            </Panel>
+
             <Panel title="Workflow Timeline" eyebrow="Connected agent stages">
-              <div className="grid gap-4 xl:grid-cols-5">
+              <div className="grid gap-4 xl:grid-cols-6">
                 {TIMELINE_STEPS.map(([key, label, description], index) => {
                   const state = timelineStatus(key, workflow, outputs, toolCalls);
 
