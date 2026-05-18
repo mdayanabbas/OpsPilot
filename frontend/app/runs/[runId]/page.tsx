@@ -80,6 +80,14 @@ type MemoryItem = {
   created_at: string;
 };
 
+type CriticResult = {
+  id: number;
+  workflow_run_id: number;
+  critic_status: "passed" | "warning" | "blocked" | string;
+  risk_flags: string[];
+  quality_notes: string[];
+  recommended_action: string;
+  requires_manual_review: boolean;
 type PlannerTool = {
   tool_name: string;
   reason: string;
@@ -113,6 +121,7 @@ const TIMELINE_STEPS = [
   ["ticket_generation", "Ticket", "Create engineering task"],
   ["reply_generation", "Reply", "Draft customer response"],
   ["evaluation", "Evaluate", "Score quality and risk"],
+  ["critic", "Critic", "Review generated outputs"],
 ] as const;
 
 const NAV_ITEMS = [
@@ -170,15 +179,15 @@ function dateTime(value: string) {
 }
 
 function toneClass(tone: string) {
-  if (tone === "completed" || tone === "success" || tone === "low" || tone === "healthy") {
+  if (tone === "completed" || tone === "success" || tone === "low" || tone === "healthy" || tone === "passed") {
     return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-emerald-950/30";
   }
 
-  if (tone === "failed" || tone === "high" || tone === "degraded") {
+  if (tone === "failed" || tone === "high" || tone === "degraded" || tone === "blocked") {
     return "border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-rose-950/30";
   }
 
-  if (tone === "needs_clarification" || tone === "medium" || tone === "skipped" || tone === "recovered") {
+  if (tone === "needs_clarification" || tone === "medium" || tone === "skipped" || tone === "recovered" || tone === "warning") {
     return "border-amber-400/25 bg-amber-400/10 text-amber-200 shadow-amber-950/30";
   }
 
@@ -206,7 +215,9 @@ function timelineStatus(
   workflow: WorkflowRun,
   outputs: WorkflowOutputs,
   toolCalls: ToolCall[],
+  criticResult?: CriticResult | null,
 ) {
+  if (step === "critic" && criticResult) return "completed";
   if (step === "evaluation" && outputs.evaluation) return "completed";
   if (step === "ticket_generation" && outputs.tickets.length > 0) return "completed";
   if (step === "reply_generation" && outputs.customer_replies.length > 0) return "completed";
@@ -218,15 +229,15 @@ function timelineStatus(
 }
 
 function metricToneClass(tone: string = "default") {
-  if (tone === "healthy" || tone === "success") {
+  if (tone === "healthy" || tone === "success" || tone === "passed") {
     return "border-emerald-300/20 bg-emerald-300/[0.07] shadow-emerald-950/20";
   }
 
-  if (tone === "recovered" || tone === "medium") {
+  if (tone === "recovered" || tone === "medium" || tone === "warning") {
     return "border-amber-300/20 bg-amber-300/[0.07] shadow-amber-950/20";
   }
 
-  if (tone === "failed" || tone === "degraded") {
+  if (tone === "failed" || tone === "degraded" || tone === "blocked") {
     return "border-rose-300/20 bg-rose-300/[0.07] shadow-rose-950/20";
   }
 
@@ -367,6 +378,7 @@ export default async function WorkflowRunDetailsPage({
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
     fetchJson<MemoryItem[]>(`/api/v1/workflows/${runId}/memory`),
+    fetchOptionalJson<CriticResult>(`/api/v1/workflows/${runId}/critic`),
     fetchOptionalJson<PlannerDecision>(`/api/v1/workflows/${runId}/planner`),
   ]);
 
@@ -598,7 +610,7 @@ export default async function WorkflowRunDetailsPage({
             <Panel title="Workflow Timeline" eyebrow="Connected agent stages">
               <div className="grid gap-4 xl:grid-cols-6">
                 {TIMELINE_STEPS.map(([key, label, description], index) => {
-                  const state = timelineStatus(key, workflow, outputs, toolCalls);
+                  const state = timelineStatus(key, workflow, outputs, toolCalls, criticResult);
 
                   return (
                     <div key={key} className="relative">
@@ -845,6 +857,74 @@ export default async function WorkflowRunDetailsPage({
                 </div>
               ) : (
                 <EmptyState>No similar past issues have been stored yet.</EmptyState>
+              )}
+            </Panel>
+
+            <Panel title="Critic Review" eyebrow="Deterministic reflection">
+              {criticResult ? (
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={criticResult.critic_status}>{titleize(criticResult.critic_status)}</Badge>
+                    <Badge tone={criticResult.requires_manual_review ? "medium" : "success"}>
+                      {criticResult.requires_manual_review ? "manual review required" : "manual review clear"}
+                    </Badge>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <MetricTile label="Status" value={titleize(criticResult.critic_status)} tone={criticResult.critic_status} />
+                    <MetricTile
+                      label="Manual Review"
+                      value={criticResult.requires_manual_review ? "Required" : "Clear"}
+                      tone={criticResult.requires_manual_review ? "medium" : "healthy"}
+                    />
+                    <MetricTile label="Reviewed" value={dateTime(criticResult.created_at)} />
+                  </div>
+
+                  <div className="rounded-3xl border border-white/10 bg-black/20 p-5 shadow-xl shadow-black/15">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recommended Action</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-200">{criticResult.recommended_action}</p>
+                  </div>
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-3xl border border-rose-300/20 bg-rose-300/[0.055] p-5 shadow-xl shadow-rose-950/15">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-100/75">Risk Flags</p>
+                        <Badge tone={criticResult.risk_flags.length ? "high" : "success"}>
+                          {criticResult.risk_flags.length || "none"}
+                        </Badge>
+                      </div>
+                      {criticResult.risk_flags.length > 0 ? (
+                        <ul className="mt-4 space-y-3 text-sm leading-6 text-rose-50/90">
+                          {criticResult.risk_flags.map((flag) => (
+                            <li key={flag}>{flag}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">No risk flags detected.</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-3xl border border-amber-300/20 bg-amber-300/[0.06] p-5 shadow-xl shadow-amber-950/15">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-100/75">Quality Notes</p>
+                        <Badge tone={criticResult.quality_notes.length ? "medium" : "success"}>
+                          {criticResult.quality_notes.length || "none"}
+                        </Badge>
+                      </div>
+                      {criticResult.quality_notes.length > 0 ? (
+                        <ul className="mt-4 space-y-3 text-sm leading-6 text-amber-50/90">
+                          {criticResult.quality_notes.map((note) => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-4 text-sm leading-6 text-slate-400">No quality warnings detected.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState>No critic review has been recorded for this run yet.</EmptyState>
               )}
             </Panel>
 
