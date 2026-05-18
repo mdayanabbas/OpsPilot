@@ -1,6 +1,9 @@
+import json
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.agents.nodes.critic_node import critique_workflow_output
 from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.founder_summary_node import generate_founder_summary
 from app.agents.nodes.intent_router_node import detect_workflow_intent
@@ -10,6 +13,7 @@ from app.agents.nodes.ticket_generation_node import generate_ticket
 from app.config import LLM_PROVIDER
 from app.database import SessionLocal, get_db
 from app.models.agent_step import AgentStep
+from app.models.critic_result import CriticResult
 from app.models.evaluation import EvaluationResult
 from app.models.memory import MemoryItem
 from app.models.reply import CustomerReply
@@ -18,6 +22,7 @@ from app.models.ticket import Ticket
 from app.models.tool_call import ToolCall
 from app.models.workflow import WorkflowRun
 from app.schemas.agent_step_schema import AgentStepResponse
+from app.schemas.critic_result_schema import CriticResultResponse
 from app.schemas.evaluation_schema import EvaluationResultResponse
 from app.schemas.reply_schema import CustomerReplyResponse
 from app.schemas.summary_schema import FounderSummaryResponse
@@ -102,6 +107,51 @@ def _memory_source_evidence(memory_matches: list[MemoryItem]) -> str | None:
 
     first_match = memory_matches[0]
     return f"Similar past issue found in workflow #{first_match.workflow_run_id}: {first_match.title}"
+
+
+def _save_critic_result(
+    db: Session,
+    workflow_run_id: int,
+    critic_result: dict,
+) -> CriticResult:
+    critic = CriticResult(
+        workflow_run_id=workflow_run_id,
+        critic_status=critic_result["critic_status"],
+        risk_flags=json.dumps(critic_result["risk_flags"]),
+        quality_notes=json.dumps(critic_result["quality_notes"]),
+        recommended_action=critic_result["recommended_action"],
+        requires_manual_review=critic_result["requires_manual_review"],
+    )
+    db.add(critic)
+    return critic
+
+
+def _critic_result_response(critic: CriticResult) -> CriticResultResponse:
+    try:
+        risk_flags = json.loads(critic.risk_flags)
+    except (TypeError, json.JSONDecodeError):
+        risk_flags = []
+
+    try:
+        quality_notes = json.loads(critic.quality_notes)
+    except (TypeError, json.JSONDecodeError):
+        quality_notes = []
+
+    if not isinstance(risk_flags, list):
+        risk_flags = []
+    if not isinstance(quality_notes, list):
+        quality_notes = []
+
+    return CriticResultResponse(
+        id=critic.id,
+        workflow_run_id=critic.workflow_run_id,
+        critic_status=critic.critic_status,
+        risk_flags=risk_flags,
+        quality_notes=quality_notes,
+        recommended_action=critic.recommended_action,
+        requires_manual_review=critic.requires_manual_review,
+        created_at=critic.created_at,
+    )
 
 
 @router.get("")
@@ -553,11 +603,44 @@ def _execute_workflow_run_sync(
         risks=evaluation_result["risks"],
     )
 
+    ticket_context = dict(generated_ticket)
+    ticket_context["requires_approval"] = ticket.requires_approval
+    critic_result = critique_workflow_output(
+        {
+            "issue": first_issue,
+            "ticket": ticket_context,
+            "reply": reply_result,
+            "evaluation": evaluation_result,
+            "planner_decision": None,
+            "memory_matches": [
+                _memory_payload(memory_item)
+                for memory_item in memory_matches
+            ],
+            "tool_calls": [
+                _tool_call_payload(tool_call)
+                for tool_call in starter_tool_calls
+            ],
+        }
+    )
+    critic = _save_critic_result(db, workflow_run.id, critic_result)
+    critic_tool_call = ToolCall(
+        workflow_run_id=workflow_run.id,
+        step_name="critic",
+        tool_name="critic_node",
+        provider="deterministic",
+        status="success",
+        attempt=1,
+        fallback_used=False,
+        error_message=None,
+    )
+
     db.add_all(starter_tool_calls)
     db.add(ticket)
     db.add(reply)
     db.add(founder_summary)
     db.add(evaluation)
+    db.add(critic)
+    db.add(critic_tool_call)
     save_memory_from_workflow(
         db,
         workflow_run_id=workflow_run.id,
@@ -664,6 +747,26 @@ def get_workflow_memory(workflow_run_id: int, db: Session = Depends(get_db)):
         .order_by(MemoryItem.created_at.desc())
         .all()
     )
+
+
+@router.get("/{workflow_run_id}/critic", response_model=CriticResultResponse)
+def get_workflow_critic_result(workflow_run_id: int, db: Session = Depends(get_db)):
+    workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+
+    if not workflow_run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+
+    critic = (
+        db.query(CriticResult)
+        .filter(CriticResult.workflow_run_id == workflow_run_id)
+        .order_by(CriticResult.created_at.desc(), CriticResult.id.desc())
+        .first()
+    )
+
+    if not critic:
+        raise HTTPException(status_code=404, detail="Critic result not found")
+
+    return _critic_result_response(critic)
 
 
 @router.get("/{workflow_run_id}/outputs")
