@@ -100,7 +100,9 @@ def _normalize_ticket(raw_ticket: dict, issue: dict) -> dict:
     if not isinstance(raw_ticket, dict):
         return fallback
 
-    category = raw_ticket.get("category")
+    category = issue.get("category")
+    if category not in CATEGORY_TO_TEAM:
+        category = raw_ticket.get("category")
     if category not in CATEGORY_TO_TEAM:
         category = fallback["category"]
 

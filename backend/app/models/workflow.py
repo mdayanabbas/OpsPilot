@@ -29,3 +29,5 @@ class WorkflowRun(Base):
     planner_decisions = relationship("PlannerDecision", back_populates="workflow_run", cascade="all, delete-orphan")
     critic_results = relationship("CriticResult", back_populates="workflow_run", cascade="all, delete-orphan")
     agent_execution_traces = relationship("AgentExecutionTrace", back_populates="workflow_run", cascade="all, delete-orphan")
+    critic_results = relationship("CriticResult", back_populates="workflow_run", cascade="all, delete-orphan")
+    planner_decisions = relationship("PlannerDecision", back_populates="workflow_run", cascade="all, delete-orphan")

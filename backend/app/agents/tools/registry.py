@@ -5,6 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.founder_summary_node import generate_founder_summary
+from app.agents.nodes.reply_generation_node import generate_customer_reply
+from app.agents.nodes.ticket_generation_node import generate_ticket
+from app.models.incident import Incident
+from app.models.memory import MemoryItem
+from app.services.email_alert_service import send_incident_alert
+from app.services.incident_service import detect_incidents
 from app.services.memory_service import search_memory
 
 
@@ -33,6 +39,7 @@ def _required_db(payload: dict) -> Session:
 
 
 def _serialize_memory_item(item) -> dict:
+def _serialize_memory_item(item: MemoryItem) -> dict:
     return {
         "id": item.id,
         "workflow_run_id": item.workflow_run_id,
@@ -45,6 +52,34 @@ def _serialize_memory_item(item) -> dict:
     }
 
 
+def _serialize_incident(incident: Incident | None) -> dict | None:
+    if incident is None:
+        return None
+
+    return {
+        "id": incident.id,
+        "category": incident.category,
+        "title": incident.title,
+        "description": incident.description,
+        "severity": incident.severity,
+        "workflow_count": incident.workflow_count,
+        "root_cause_summary": incident.root_cause_summary,
+        "operational_risks": incident.operational_risks,
+        "recommended_actions": incident.recommended_actions,
+        "first_detected_at": (
+            incident.first_detected_at.isoformat()
+            if incident.first_detected_at
+            else None
+        ),
+        "last_detected_at": (
+            incident.last_detected_at.isoformat()
+            if incident.last_detected_at
+            else None
+        ),
+        "status": incident.status,
+    }
+
+
 def _search_memory_handler(payload: dict) -> dict:
     matches = search_memory(
         db=_required_db(payload),
@@ -53,6 +88,14 @@ def _search_memory_handler(payload: dict) -> dict:
         limit=payload.get("limit", 5),
     )
     return {"matches": [_serialize_memory_item(item) for item in matches]}
+
+
+def _generate_ticket_handler(payload: dict) -> dict:
+    return generate_ticket(_required(payload, "issue"))
+
+
+def _generate_customer_reply_handler(payload: dict) -> dict:
+    return generate_customer_reply(_required(payload, "issue"))
 
 
 def _evaluate_workflow_output_handler(payload: dict) -> dict:
@@ -75,6 +118,21 @@ def _generate_founder_summary_handler(payload: dict) -> dict:
     )
 
 
+def _detect_incident_handler(payload: dict) -> dict:
+    incident = detect_incidents(_required_db(payload))
+    return {"incident": _serialize_incident(incident)}
+
+
+def _send_incident_alert_handler(payload: dict) -> dict:
+    sent = send_incident_alert(
+        incident=_required(payload, "incident"),
+        intelligence=_required(payload, "intelligence"),
+        related_workflow_ids=_required(payload, "related_workflow_ids"),
+        reason=_required(payload, "reason"),
+    )
+    return {"sent": sent}
+
+
 _TOOL_REGISTRY: dict[str, AgentTool] = {
     "search_memory": AgentTool(
         name="search_memory",
@@ -91,6 +149,30 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
         },
         handler=_search_memory_handler,
     ),
+            "required": ["db", "category", "query"],
+        },
+        handler=_search_memory_handler,
+    ),
+    "generate_ticket": AgentTool(
+        name="generate_ticket",
+        description="Generate an engineering ticket from an extracted issue.",
+        input_schema={
+            "type": "object",
+            "properties": {"issue": {"type": "object"}},
+            "required": ["issue"],
+        },
+        handler=_generate_ticket_handler,
+    ),
+    "generate_customer_reply": AgentTool(
+        name="generate_customer_reply",
+        description="Generate a safe draft customer reply for an issue.",
+        input_schema={
+            "type": "object",
+            "properties": {"issue": {"type": "object"}},
+            "required": ["issue"],
+        },
+        handler=_generate_customer_reply_handler,
+    ),
     "evaluate_workflow_output": AgentTool(
         name="evaluate_workflow_output",
         description="Evaluate generated ticket and reply quality for a workflow.",
@@ -103,6 +185,7 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
                 "reply": {"type": "object"},
                 "fallback_used": {"type": "boolean", "default": False},
             },
+            "required": ["issue", "ticket", "reply"],
         },
         handler=_evaluate_workflow_output_handler,
     ),
@@ -122,6 +205,43 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
             },
         },
         handler=_generate_founder_summary_handler,
+    ),
+            "required": ["issue", "ticket", "reply", "evaluation"],
+        },
+        handler=_generate_founder_summary_handler,
+    ),
+    "detect_incident": AgentTool(
+        name="detect_incident",
+        description="Detect active incident clusters from recent workflow activity.",
+        input_schema={
+            "type": "object",
+            "properties": {"db": {"description": "SQLAlchemy Session"}},
+            "required": ["db"],
+        },
+        handler=_detect_incident_handler,
+    ),
+    "send_incident_alert": AgentTool(
+        name="send_incident_alert",
+        description="Send an internal alert for a detected incident.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "incident": {"description": "Incident model instance"},
+                "intelligence": {"type": "object"},
+                "related_workflow_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                },
+                "reason": {"type": "string"},
+            },
+            "required": [
+                "incident",
+                "intelligence",
+                "related_workflow_ids",
+                "reason",
+            ],
+        },
+        handler=_send_incident_alert_handler,
     ),
 }
 
@@ -143,6 +263,8 @@ def list_tools() -> list[dict]:
 
 def execute_tool(tool_name: str, payload: dict) -> dict:
     tool = _TOOL_REGISTRY.get(tool_name)
+    registry = get_tool_registry()
+    tool = registry.get(tool_name)
     if tool is None:
         raise ValueError(f"Unknown tool: {tool_name}")
 
