@@ -20,3 +20,4 @@ class PlannerDecision(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     workflow_run = relationship("WorkflowRun", back_populates="planner_decisions")
+    execution_traces = relationship("AgentExecutionTrace", back_populates="planner_decision", cascade="all, delete-orphan")

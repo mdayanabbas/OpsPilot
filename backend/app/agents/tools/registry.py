@@ -38,6 +38,7 @@ def _required_db(payload: dict) -> Session:
     return db
 
 
+def _serialize_memory_item(item) -> dict:
 def _serialize_memory_item(item: MemoryItem) -> dict:
     return {
         "id": item.id,
@@ -138,12 +139,16 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
         description="Search stored workflow memory for similar past issues.",
         input_schema={
             "type": "object",
+            "required": ["db", "category", "query"],
             "properties": {
                 "db": {"description": "SQLAlchemy Session"},
                 "category": {"type": "string"},
                 "query": {"type": "string"},
                 "limit": {"type": "integer", "default": 5},
             },
+        },
+        handler=_search_memory_handler,
+    ),
             "required": ["db", "category", "query"],
         },
         handler=_search_memory_handler,
@@ -173,6 +178,7 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
         description="Evaluate generated ticket and reply quality for a workflow.",
         input_schema={
             "type": "object",
+            "required": ["issue", "ticket", "reply"],
             "properties": {
                 "issue": {"type": "object"},
                 "ticket": {"type": "object"},
@@ -188,6 +194,7 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
         description="Generate a founder-facing workflow summary and recommended actions.",
         input_schema={
             "type": "object",
+            "required": ["issue", "ticket", "reply", "evaluation"],
             "properties": {
                 "issue": {"type": "object"},
                 "ticket": {"type": "object"},
@@ -196,6 +203,9 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
                 "tool_calls": {"type": "array", "items": {"type": "object"}},
                 "memory_matches": {"type": "array", "items": {"type": "object"}},
             },
+        },
+        handler=_generate_founder_summary_handler,
+    ),
             "required": ["issue", "ticket", "reply", "evaluation"],
         },
         handler=_generate_founder_summary_handler,
@@ -252,6 +262,7 @@ def list_tools() -> list[dict]:
 
 
 def execute_tool(tool_name: str, payload: dict) -> dict:
+    tool = _TOOL_REGISTRY.get(tool_name)
     registry = get_tool_registry()
     tool = registry.get(tool_name)
     if tool is None:

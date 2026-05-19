@@ -112,6 +112,44 @@ def _memory_source_evidence(memory_matches: list[MemoryItem]) -> str | None:
     return f"Similar past issue found in workflow #{first_match.workflow_run_id}: {first_match.title}"
 
 
+def _save_planner_decision(
+    db: Session,
+    workflow_run_id: int,
+    planner_result: dict,
+) -> PlannerDecision:
+    planner_decision = PlannerDecision(
+        workflow_run_id=workflow_run_id,
+        plan_type=planner_result["plan_type"],
+        next_tools=json.dumps(planner_result["next_tools"]),
+        requires_human_approval=planner_result["requires_human_approval"],
+        reasoning_summary=planner_result["reasoning_summary"],
+    )
+    db.add(planner_decision)
+    db.commit()
+    db.refresh(planner_decision)
+    return planner_decision
+
+
+def _planner_payload(planner_decision: PlannerDecision) -> dict:
+    try:
+        next_tools = json.loads(planner_decision.next_tools)
+    except (TypeError, json.JSONDecodeError):
+        next_tools = []
+
+    if not isinstance(next_tools, list):
+        next_tools = []
+
+    return {
+        "id": planner_decision.id,
+        "workflow_run_id": planner_decision.workflow_run_id,
+        "plan_type": planner_decision.plan_type,
+        "next_tools": next_tools,
+        "requires_human_approval": planner_decision.requires_human_approval,
+        "reasoning_summary": planner_decision.reasoning_summary,
+        "created_at": planner_decision.created_at,
+    }
+
+
 def _save_critic_result(
     db: Session,
     workflow_run_id: int,
@@ -553,6 +591,17 @@ def _execute_workflow_run_sync(
             ),
         }
     )
+    planner_decision = _save_planner_decision(db, workflow_run.id, planner_result)
+    planner_tool_call = ToolCall(
+        workflow_run_id=workflow_run.id,
+        step_name="planner",
+        tool_name="planner_node",
+        provider="deterministic",
+        status="success",
+        attempt=1,
+        fallback_used=False,
+        error_message=None,
+    )
     _save_planner_decision(db, workflow_run.id, planner_result)
     if planner_result["plan_type"] == "clarification":
         workflow_run.status = "needs_clarification"
@@ -640,6 +689,7 @@ def _execute_workflow_run_sync(
 
     starter_tool_calls = [
         intent_tool_call,
+        planner_tool_call,
         issue_extraction_tool_call,
         ticket_tool_call,
         reply_tool_call,
@@ -714,6 +764,7 @@ def _execute_workflow_run_sync(
             "ticket": ticket_context,
             "reply": reply_result,
             "evaluation": evaluation_result,
+            "planner_decision": _planner_payload(planner_decision),
             "planner_decision": None,
             "memory_matches": [
                 _memory_payload(memory_item)
@@ -723,6 +774,7 @@ def _execute_workflow_run_sync(
                 _tool_call_payload(tool_call)
                 for tool_call in starter_tool_calls
             ],
+            "fallback_used": reply_result.get("fallback_used", False),
         }
     )
     critic = _save_critic_result(db, workflow_run.id, critic_result)
@@ -852,6 +904,28 @@ def get_workflow_memory(workflow_run_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/{workflow_run_id}/planner", response_model=PlannerDecisionResponse)
+def get_workflow_planner_decision(workflow_run_id: int, db: Session = Depends(get_db)):
+    workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
+
+    if not workflow_run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+
+    planner_decision = (
+        db.query(PlannerDecision)
+        .filter(PlannerDecision.workflow_run_id == workflow_run_id)
+        .order_by(PlannerDecision.created_at.desc(), PlannerDecision.id.desc())
+        .first()
+    )
+
+    if not planner_decision:
+        raise HTTPException(status_code=404, detail="Planner decision not found")
+
+    return _planner_payload(planner_decision)
+
+
+@router.get("/{workflow_run_id}/critic", response_model=CriticResultResponse)
+def get_workflow_critic_result(workflow_run_id: int, db: Session = Depends(get_db)):
 @router.get("/{workflow_run_id}/critic", response_model=CriticResultResponse)
 def get_workflow_critic_result(workflow_run_id: int, db: Session = Depends(get_db)):
 @router.get("/{workflow_run_id}/planner", response_model=PlannerDecisionResponse)

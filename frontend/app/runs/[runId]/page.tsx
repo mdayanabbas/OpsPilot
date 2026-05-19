@@ -373,6 +373,7 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
+  const [workflow, outputs, toolCalls, memoryItems, criticResult] = await Promise.all([
   const [workflow, outputs, toolCalls, memoryItems, plannerDecision] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
@@ -608,6 +609,7 @@ export default async function WorkflowRunDetailsPage({
             </Panel>
 
             <Panel title="Workflow Timeline" eyebrow="Connected agent stages">
+              <div className="grid gap-4 xl:grid-cols-7">
               <div className="grid gap-4 xl:grid-cols-6">
                 {TIMELINE_STEPS.map(([key, label, description], index) => {
                   const state = timelineStatus(key, workflow, outputs, toolCalls, criticResult);
@@ -868,6 +870,7 @@ export default async function WorkflowRunDetailsPage({
                     <Badge tone={criticResult.requires_manual_review ? "medium" : "success"}>
                       {criticResult.requires_manual_review ? "manual review required" : "manual review clear"}
                     </Badge>
+                    <Badge tone="default">{dateTime(criticResult.created_at)}</Badge>
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
@@ -877,6 +880,7 @@ export default async function WorkflowRunDetailsPage({
                       value={criticResult.requires_manual_review ? "Required" : "Clear"}
                       tone={criticResult.requires_manual_review ? "medium" : "healthy"}
                     />
+                    <MetricTile label="Risk Flags" value={String(criticResult.risk_flags.length)} tone={criticResult.risk_flags.length ? "medium" : "healthy"} />
                     <MetricTile label="Reviewed" value={dateTime(criticResult.created_at)} />
                   </div>
 
@@ -887,6 +891,7 @@ export default async function WorkflowRunDetailsPage({
 
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-3xl border border-rose-300/20 bg-rose-300/[0.055] p-5 shadow-xl shadow-rose-950/15">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-100/75">Risk Flags</p>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-100/75">Risk Flags</p>
                         <Badge tone={criticResult.risk_flags.length ? "high" : "success"}>
@@ -905,6 +910,7 @@ export default async function WorkflowRunDetailsPage({
                     </div>
 
                     <div className="rounded-3xl border border-amber-300/20 bg-amber-300/[0.06] p-5 shadow-xl shadow-amber-950/15">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-100/75">Quality Notes</p>
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-100/75">Quality Notes</p>
                         <Badge tone={criticResult.quality_notes.length ? "medium" : "success"}>
