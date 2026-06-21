@@ -6,6 +6,9 @@ The project combines LLM-assisted reasoning with deterministic normalization, va
 
 ## Architecture Diagram
 
+<img width="1724" height="7228" alt="fiaa" src="https://github.com/user-attachments/assets/76b8846d-c409-4eb3-bbdf-eb71ca26cc5f" />
+
+
 ## What OpsPilot Does
 
 OpsPilot currently supports one primary workflow: `customer_feedback_triage`.
