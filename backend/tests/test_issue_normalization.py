@@ -40,13 +40,13 @@ class IssueNormalizationTests(unittest.TestCase):
         self.assertEqual(result["issues"][0]["category"], "performance")
 
     def test_webhook_sync_failed_between_stripe_and_billing(self):
-        result = self._normalize("Webhook sync failed between Stripe and billing system.")
+        result = self._normalize("Webhook sync between Stripe and CRM is failing.")
 
         self.assertFalse(result["requires_clarification"])
         self.assertEqual(result["issues"][0]["category"], "integration")
 
     def test_success_only_feedback_requires_clarification(self):
-        result = self._normalize("Customer says everything works great.")
+        result = self._normalize("Everything works perfectly.")
 
         self.assertTrue(result["requires_clarification"])
         self.assertEqual(result["issues"], [])
@@ -60,6 +60,32 @@ class IssueNormalizationTests(unittest.TestCase):
         self.assertFalse(result["requires_clarification"])
         self.assertTrue(result["normalization_applied"])
         self.assertIn("overrode clarification", result["normalization_reason"])
+
+    def test_successful_purchase_requires_clarification(self):
+        result = self._normalize("John purchased successfully.")
+
+        self.assertTrue(result["requires_clarification"])
+        self.assertEqual(result["issues"], [])
+
+    def test_result_has_documented_contract(self):
+        result = self._normalize("Dashboard freezes when exporting reports.")
+
+        self.assertEqual(
+            set(result),
+            {
+                "issues",
+                "requires_clarification",
+                "normalization_applied",
+                "normalization_reason",
+                "confidence",
+            },
+        )
+
+    def test_explicitly_no_customer_impact_requires_clarification(self):
+        result = self._normalize("Webhook failed in an internal test only; no customers affected.")
+
+        self.assertTrue(result["requires_clarification"])
+        self.assertEqual(result["issues"], [])
 
 
 if __name__ == "__main__":

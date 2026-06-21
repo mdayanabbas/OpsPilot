@@ -438,18 +438,6 @@ def _execute_workflow_run_sync(
             db.refresh(workflow_run)
         return workflow_run
 
-    planner_step = AgentStep(
-        workflow_run_id=workflow_run.id,
-        step_name="planner",
-        status="completed",
-        input_summary="Workflow type confirmed.",
-        output_summary="Generated initial triage plan.",
-        confidence=0.88,
-        latency_ms=180,
-    )
-    db.add(planner_step)
-    db.commit()
-
     try:
         extracted_issue_result = extract_issues(payload.input_text)
         issue_result = normalize_issue_result(payload.input_text, extracted_issue_result)
@@ -503,13 +491,48 @@ def _execute_workflow_run_sync(
         workflow_run_id=workflow_run.id,
         step_name="issue_extraction",
         tool_name="issue_extraction",
-        provider=_result_provider(issue_result),
+        provider=_result_provider(extracted_issue_result),
         status="success",
-        attempt=_result_attempt(issue_result),
-        fallback_used=_result_fallback_used(issue_result),
+        attempt=_result_attempt(extracted_issue_result),
+        fallback_used=_result_fallback_used(extracted_issue_result),
         error_message=None,
     )
-    db.add_all([issue_extraction_step, issue_extraction_tool_call])
+    issue_normalization_step = AgentStep(
+        workflow_run_id=workflow_run.id,
+        step_name="issue_normalization",
+        status=("needs_clarification" if issue_result["requires_clarification"] else "completed"),
+        input_summary=f"Received {len(extracted_issue_result.get('issues', []))} extracted issue(s).",
+        output_summary=issue_result["normalization_reason"],
+        confidence=issue_result["confidence"],
+    )
+    issue_normalization_tool_call = ToolCall(
+        workflow_run_id=workflow_run.id,
+        step_name="issue_normalization",
+        tool_name="issue_normalization",
+        provider="deterministic",
+        status="success",
+        attempt=1,
+        fallback_used=False,
+        error_message=None,
+    )
+    db.add_all([
+        issue_extraction_step,
+        issue_extraction_tool_call,
+        issue_normalization_step,
+        issue_normalization_tool_call,
+    ])
+    db.commit()
+
+    planner_step = AgentStep(
+        workflow_run_id=workflow_run.id,
+        step_name="planner",
+        status="completed",
+        input_summary="Normalized issue result.",
+        output_summary="Generated initial triage plan.",
+        confidence=0.88,
+        latency_ms=180,
+    )
+    db.add(planner_step)
     db.commit()
 
     if not issues:
@@ -518,7 +541,7 @@ def _execute_workflow_run_sync(
                 "workflow_type": workflow_run.workflow_type,
                 "confidence": issue_result.get("confidence", workflow_run.confidence),
                 "requires_clarification": issue_result.get("requires_clarification", True),
-                "fallback_used": _result_fallback_used(issue_result),
+                "fallback_used": _result_fallback_used(extracted_issue_result),
             }
         )
         _save_planner_decision(db, workflow_run.id, planner_result)
@@ -563,7 +586,7 @@ def _execute_workflow_run_sync(
             "requires_clarification": issue_result.get("requires_clarification", False),
             "fallback_used": (
                 _result_fallback_used(intent_result)
-                or _result_fallback_used(issue_result)
+                or _result_fallback_used(extracted_issue_result)
             ),
         }
     )
