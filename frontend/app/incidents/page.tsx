@@ -23,6 +23,15 @@ type Incident = {
   status: string;
 };
 
+type IncidentResponsePlan = {
+  id: number;
+  incident_id: number;
+  plan_type: string;
+  next_tools: string[];
+  reasoning: string;
+  created_at: string;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const NAV_ITEMS = [
   ["Dashboard", "/"],
@@ -72,6 +81,7 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [responsePlans, setResponsePlans] = useState<Record<number, IncidentResponsePlan>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +95,26 @@ export default function IncidentsPage() {
         if (!response.ok) {
           throw new Error(`Failed to load incidents: ${response.status}`);
         }
-        setIncidents((await response.json()) as Incident[]);
+        const loadedIncidents = (await response.json()) as Incident[];
+        setIncidents(loadedIncidents);
+
+        const planEntries = await Promise.all(
+          loadedIncidents.map(async (incident) => {
+            const planResponse = await fetch(
+              `${API_BASE_URL}/api/v1/incidents/${incident.id}/response-plan`,
+              { cache: "no-store" },
+            );
+            if (!planResponse.ok) return null;
+            return [incident.id, (await planResponse.json()) as IncidentResponsePlan] as const;
+          }),
+        );
+        setResponsePlans(
+          Object.fromEntries(
+            planEntries.filter(
+              (entry): entry is readonly [number, IncidentResponsePlan] => entry !== null,
+            ),
+          ),
+        );
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : "Unable to load incidents.");
       } finally {
@@ -238,6 +267,56 @@ export default function IncidentsPage() {
                             )}
                           </div>
                         </div>
+                      </div>
+
+                      <div className="mt-5 overflow-hidden rounded-3xl border border-violet-300/20 bg-violet-300/[0.055] shadow-xl shadow-violet-950/15">
+                        <div className="flex flex-col gap-3 border-b border-violet-300/15 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-200/65">
+                              Read-only planning v1
+                            </p>
+                            <h4 className="mt-1 text-base font-semibold text-white">Incident Response Plan</h4>
+                          </div>
+                          {responsePlans[incident.id] ? (
+                            <Badge className="border-violet-300/25 bg-violet-300/10 text-violet-100">
+                              {titleize(responsePlans[incident.id].plan_type)}
+                            </Badge>
+                          ) : null}
+                        </div>
+
+                        {responsePlans[incident.id] ? (
+                          <div className="grid gap-5 p-5 lg:grid-cols-[1.25fr_0.75fr]">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                Reasoning
+                              </p>
+                              <p className="mt-3 text-sm leading-7 text-slate-300">
+                                {responsePlans[incident.id].reasoning}
+                              </p>
+                              <p className="mt-3 text-xs text-slate-500">
+                                Planned {dateTime(responsePlans[incident.id].created_at)} · No actions executed
+                              </p>
+                            </div>
+
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                Selected Tools
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {responsePlans[incident.id].next_tools.map((tool) => (
+                                  <span
+                                    key={tool}
+                                    className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 font-mono text-xs text-violet-100"
+                                  >
+                                    {tool}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-5 text-sm text-slate-400">Preparing response plan...</div>
+                        )}
                       </div>
 
                       <div className="mt-5 grid gap-3 text-xs text-slate-500 md:grid-cols-2">

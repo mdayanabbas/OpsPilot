@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 
@@ -20,3 +21,9 @@ class Incident(Base):
     first_detected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_detected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     status = Column(String(50), nullable=False, default="active")
+
+    response_plans = relationship(
+        "IncidentResponsePlan",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+    )
