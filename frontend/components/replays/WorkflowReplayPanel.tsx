@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 
@@ -37,6 +38,7 @@ function dateTime(value: string) {
 }
 
 export function WorkflowReplayPanel({ workflowRunId }: { workflowRunId: number }) {
+  const router = useRouter();
   const [history, setHistory] = useState<WorkflowReplay[]>([]);
   const [latestReplay, setLatestReplay] = useState<WorkflowReplay | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,6 +73,7 @@ export function WorkflowReplayPanel({ workflowRunId }: { workflowRunId: number }
       const replay = (await response.json()) as WorkflowReplay;
       setLatestReplay(replay);
       await loadHistory();
+      router.refresh();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Unable to replay workflow.");
     } finally {

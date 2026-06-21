@@ -11,7 +11,8 @@
     "@tailwindcss/postcss": "^4.3.0",
     "next": "^16.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

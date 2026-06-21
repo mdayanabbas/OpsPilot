@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ApprovalActions } from "../../../components/approvals/ApprovalActions";
 import { WorkflowReplayPanel } from "../../../components/replays/WorkflowReplayPanel";
-import { AgentTraceGraph } from "../../../components/workflows/AgentTraceGraph";
+import { AgentTraceFlow } from "../../../components/workflows/AgentTraceFlow";
 
 type WorkflowRun = {
   id: number;
@@ -534,7 +534,8 @@ export default async function WorkflowRunDetailsPage({
               </div>
             </header>
 
-            <AgentTraceGraph
+            <AgentTraceFlow
+              key={replayHistory[0]?.replay_workflow_run_id ?? "no-replay"}
               workflow={workflow}
               plannerDecision={plannerDecision}
               agentExecutions={agentExecutions}
