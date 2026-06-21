@@ -12,9 +12,11 @@ from app.agents.nodes.issue_normalization_node import normalize_issue_result
 from app.agents.nodes.planner_node import plan_next_actions
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
+from app.agents.executor import execute_planned_tools
 from app.config import LLM_PROVIDER
 from app.database import SessionLocal, get_db
 from app.models.agent_step import AgentStep
+from app.models.agent_execution_trace import AgentExecutionTrace
 from app.models.critic_result import CriticResult
 from app.models.evaluation import EvaluationResult
 from app.models.memory import MemoryItem
@@ -25,6 +27,7 @@ from app.models.ticket import Ticket
 from app.models.tool_call import ToolCall
 from app.models.workflow import WorkflowRun
 from app.schemas.agent_step_schema import AgentStepResponse
+from app.schemas.agent_execution_trace_schema import AgentExecutionTraceResponse
 from app.schemas.critic_result_schema import CriticResultResponse
 from app.schemas.evaluation_schema import EvaluationResultResponse
 from app.schemas.reply_schema import CustomerReplyResponse
@@ -684,6 +687,26 @@ def _execute_workflow_run_sync(
     db.add(evaluation_step)
     db.commit()
 
+    execute_planned_tools(
+        db=db,
+        workflow_run_id=workflow_run.id,
+        planner_decision=planner_decision,
+        context={
+            "issue": first_issue,
+            "ticket": generated_ticket,
+            "reply": reply_result,
+            "evaluation": evaluation_result,
+            "memory_category": first_issue.get("category", ""),
+            "memory_query": memory_query,
+            "memory_limit": 5,
+            "memory_matches": [
+                _memory_payload(memory_item)
+                for memory_item in memory_matches
+            ],
+            "fallback_used": reply_result.get("fallback_used", False),
+        },
+    )
+
     starter_tool_calls = [
         intent_tool_call,
         issue_extraction_tool_call,
@@ -897,6 +920,22 @@ def get_workflow_memory(workflow_run_id: int, db: Session = Depends(get_db)):
         db.query(MemoryItem)
         .filter(MemoryItem.workflow_run_id == workflow_run_id)
         .order_by(MemoryItem.created_at.desc())
+        .all()
+    )
+
+
+@router.get(
+    "/{workflow_run_id}/agent-executions",
+    response_model=list[AgentExecutionTraceResponse],
+)
+def get_workflow_agent_executions(
+    workflow_run_id: int,
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AgentExecutionTrace)
+        .filter(AgentExecutionTrace.workflow_run_id == workflow_run_id)
+        .order_by(AgentExecutionTrace.created_at.asc())
         .all()
     )
 
