@@ -38,7 +38,6 @@ def _required_db(payload: dict) -> Session:
     return db
 
 
-def _serialize_memory_item(item) -> dict:
 def _serialize_memory_item(item: MemoryItem) -> dict:
     return {
         "id": item.id,
@@ -149,10 +148,6 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
         },
         handler=_search_memory_handler,
     ),
-            "required": ["db", "category", "query"],
-        },
-        handler=_search_memory_handler,
-    ),
     "generate_ticket": AgentTool(
         name="generate_ticket",
         description="Generate an engineering ticket from an extracted issue.",
@@ -203,10 +198,6 @@ _TOOL_REGISTRY: dict[str, AgentTool] = {
                 "tool_calls": {"type": "array", "items": {"type": "object"}},
                 "memory_matches": {"type": "array", "items": {"type": "object"}},
             },
-        },
-        handler=_generate_founder_summary_handler,
-    ),
-            "required": ["issue", "ticket", "reply", "evaluation"],
         },
         handler=_generate_founder_summary_handler,
     ),

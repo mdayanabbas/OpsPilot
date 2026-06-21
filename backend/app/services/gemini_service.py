@@ -13,6 +13,75 @@ class GeminiServiceError(RuntimeError):
     """Raised when Gemini cannot return a valid structured response."""
 
 
+def _strip_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    lines = stripped.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _first_json_object(text: str) -> str:
+    start_positions = [index for index, char in enumerate(text) if char == "{"]
+    for start in start_positions:
+        depth = 0
+        in_string = False
+        escape = False
+
+        for index in range(start, len(text)):
+            char = text[index]
+
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start : index + 1]
+                    try:
+                        json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break
+                    return candidate
+
+    raise GeminiServiceError("No valid JSON object found in Gemini response")
+
+
+def _parse_json_object(text: str) -> dict:
+    stripped = _strip_code_fence(text)
+
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        try:
+            data = json.loads(_first_json_object(stripped))
+        except json.JSONDecodeError as exc:
+            raise GeminiServiceError("Gemini returned invalid JSON") from exc
+
+    if isinstance(data, str):
+        return _parse_json_object(data)
+
+    if not isinstance(data, dict):
+        raise GeminiServiceError("Gemini JSON response must be an object")
+
+    return data
+
+
 @lru_cache(maxsize=1)
 def get_gemini_client() -> genai.Client:
     if not GEMINI_API_KEY:
@@ -30,15 +99,7 @@ def _extract_json(response: Any) -> dict:
     if not text:
         raise GeminiServiceError("Gemini returned an empty response")
 
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise GeminiServiceError("Gemini returned invalid JSON") from exc
-
-    if not isinstance(data, dict):
-        raise GeminiServiceError("Gemini JSON response must be an object")
-
-    return data
+    return _parse_json_object(text)
 
 
 def _generate_json_gemini(prompt: str, response_schema: dict) -> dict:

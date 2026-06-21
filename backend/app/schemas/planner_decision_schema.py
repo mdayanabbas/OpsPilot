@@ -11,4 +11,7 @@ class PlannerDecisionResponse(BaseModel):
     next_tools: list[dict[str, Any]]
     requires_human_approval: bool
     reasoning_summary: str
+    planner_provider: str = "deterministic"
+    used_fallback: bool = False
+    raw_reasoning: str = ""
     created_at: datetime
