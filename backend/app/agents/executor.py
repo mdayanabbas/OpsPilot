@@ -8,6 +8,8 @@ from app.models.agent_execution_trace import AgentExecutionTrace
 
 SAFE_TOOL_NAMES = {
     "search_memory",
+    "generate_ticket",
+    "generate_customer_reply",
     "evaluate_workflow_output",
     "generate_founder_summary",
     "detect_incident",
@@ -15,6 +17,8 @@ SAFE_TOOL_NAMES = {
 
 TOOL_REQUIRED_CONTEXT = {
     "search_memory": ("memory_category", "memory_query"),
+    "generate_ticket": ("issue",),
+    "generate_customer_reply": ("issue",),
     "evaluate_workflow_output": ("issue", "ticket", "reply"),
     "generate_founder_summary": ("issue", "ticket", "reply", "evaluation"),
     "detect_incident": (),
@@ -45,6 +49,8 @@ def _tool_payload(tool_name: str, db, context: dict) -> dict:
             "query": context["memory_query"],
             "limit": context.get("memory_limit", 5),
         }
+    if tool_name in {"generate_ticket", "generate_customer_reply"}:
+        return {"issue": context["issue"]}
     if tool_name == "evaluate_workflow_output":
         return {
             "issue": context["issue"],
@@ -93,6 +99,12 @@ def _update_context(tool_name: str, result: object, context: dict) -> None:
         return
     if tool_name == "search_memory":
         context["memory_matches"] = result.get("matches", [])
+    elif tool_name == "generate_ticket":
+        context["ticket"] = result
+        print("[tool_executor] dynamic ticket generated")
+    elif tool_name == "generate_customer_reply":
+        context["reply"] = result
+        print("[tool_executor] dynamic reply generated")
     elif tool_name == "evaluate_workflow_output":
         context["evaluation"] = result
     elif tool_name == "generate_founder_summary":
@@ -131,7 +143,7 @@ def execute_planned_tools(
                 trace_result = {
                     "tool_name": tool_name,
                     "status": "skipped",
-                    "result_summary": "Tool is not allowlisted for dynamic execution v1.",
+                    "result_summary": "Tool is not allowlisted for dynamic execution v2.",
                     "error_message": None,
                 }
             else:
@@ -151,10 +163,24 @@ def execute_planned_tools(
                     if execution.get("ok"):
                         raw_result = execution.get("result")
                         _update_context(tool_name, raw_result, context)
+                        if tool_name == "generate_ticket":
+                            result_summary = (
+                                f"Generated ticket title={raw_result.get('title', 'unknown')}"
+                                if isinstance(raw_result, dict)
+                                else "Generated ticket."
+                            )
+                        elif tool_name == "generate_customer_reply":
+                            result_summary = (
+                                f"Generated reply risk_level={raw_result.get('risk_level', 'unknown')}"
+                                if isinstance(raw_result, dict)
+                                else "Generated customer reply."
+                            )
+                        else:
+                            result_summary = _summarize_result(raw_result)
                         trace_result = {
                             "tool_name": tool_name,
                             "status": "executed",
-                            "result_summary": _summarize_result(raw_result),
+                            "result_summary": result_summary,
                             "error_message": None,
                         }
                     else:

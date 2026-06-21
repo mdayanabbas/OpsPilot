@@ -610,8 +610,39 @@ def _execute_workflow_run_sync(
 
         return workflow_run
 
-    generated_ticket = generate_ticket(first_issue)
-    force_human_approval = planner_result["plan_type"] == "human_review"
+    dynamic_context = {
+        "issue": first_issue,
+        "memory_category": first_issue.get("category", ""),
+        "memory_query": memory_query,
+        "memory_limit": 5,
+        "memory_matches": [
+            _memory_payload(memory_item)
+            for memory_item in memory_matches
+        ],
+        "fallback_used": (
+            _result_fallback_used(intent_result)
+            or _result_fallback_used(extracted_issue_result)
+        ),
+    }
+    execute_planned_tools(
+        db=db,
+        workflow_run_id=workflow_run.id,
+        planner_decision=planner_decision,
+        context=dynamic_context,
+    )
+
+    dynamic_ticket_generated = isinstance(dynamic_context.get("ticket"), dict)
+    if dynamic_ticket_generated:
+        generated_ticket = dynamic_context["ticket"]
+        print("[workflow_routes] using dynamic executor output")
+    else:
+        print("[workflow_routes] falling back to legacy output generation")
+        generated_ticket = generate_ticket(first_issue)
+
+    force_human_approval = (
+        planner_result["plan_type"] == "human_review"
+        or first_issue.get("category") in {"billing", "auth", "security", "refund"}
+    )
     if force_human_approval:
         generated_ticket["requires_approval"] = True
 
@@ -643,7 +674,13 @@ def _execute_workflow_run_sync(
     db.add_all([ticket_step, ticket_tool_call])
     db.commit()
 
-    reply_result = generate_customer_reply(first_issue)
+    dynamic_reply_generated = isinstance(dynamic_context.get("reply"), dict)
+    if dynamic_reply_generated:
+        reply_result = dynamic_context["reply"]
+        print("[workflow_routes] using dynamic executor output")
+    else:
+        print("[workflow_routes] falling back to legacy output generation")
+        reply_result = generate_customer_reply(first_issue)
     if force_human_approval:
         reply_result["requires_approval"] = True
 
@@ -686,26 +723,6 @@ def _execute_workflow_run_sync(
     )
     db.add(evaluation_step)
     db.commit()
-
-    execute_planned_tools(
-        db=db,
-        workflow_run_id=workflow_run.id,
-        planner_decision=planner_decision,
-        context={
-            "issue": first_issue,
-            "ticket": generated_ticket,
-            "reply": reply_result,
-            "evaluation": evaluation_result,
-            "memory_category": first_issue.get("category", ""),
-            "memory_query": memory_query,
-            "memory_limit": 5,
-            "memory_matches": [
-                _memory_payload(memory_item)
-                for memory_item in memory_matches
-            ],
-            "fallback_used": reply_result.get("fallback_used", False),
-        },
-    )
 
     starter_tool_calls = [
         intent_tool_call,
@@ -812,6 +829,42 @@ def _execute_workflow_run_sync(
     db.add_all(starter_tool_calls)
     db.add(ticket)
     db.add(reply)
+    db.flush()
+
+    if dynamic_ticket_generated:
+        ticket_trace = (
+            db.query(AgentExecutionTrace)
+            .filter(
+                AgentExecutionTrace.workflow_run_id == workflow_run.id,
+                AgentExecutionTrace.planner_decision_id == planner_decision.id,
+                AgentExecutionTrace.tool_name == "generate_ticket",
+                AgentExecutionTrace.status == "executed",
+            )
+            .order_by(AgentExecutionTrace.id.desc())
+            .first()
+        )
+        if ticket_trace:
+            ticket_trace.result_summary = (
+                f"Generated ticket id={ticket.id} title={ticket.title}"
+            )
+
+    if dynamic_reply_generated:
+        reply_trace = (
+            db.query(AgentExecutionTrace)
+            .filter(
+                AgentExecutionTrace.workflow_run_id == workflow_run.id,
+                AgentExecutionTrace.planner_decision_id == planner_decision.id,
+                AgentExecutionTrace.tool_name == "generate_customer_reply",
+                AgentExecutionTrace.status == "executed",
+            )
+            .order_by(AgentExecutionTrace.id.desc())
+            .first()
+        )
+        if reply_trace:
+            reply_trace.result_summary = (
+                f"Generated reply id={reply.id} risk_level={reply.risk_level}"
+            )
+
     db.add(founder_summary)
     db.add(evaluation)
     db.add(critic)

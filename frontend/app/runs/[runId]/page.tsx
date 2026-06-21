@@ -652,15 +652,15 @@ export default async function WorkflowRunDetailsPage({
               )}
             </Panel>
 
-            <Panel title="Agent Execution" eyebrow="Dynamic tool executor v1">
+            <Panel title="Agent Execution" eyebrow="Dynamic tool executor v2">
               <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-amber-300/[0.055] p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-amber-100">Safety allowlist active</p>
                   <p className="mt-1 text-xs leading-5 text-amber-100/65">
-                    Skipped tools were intentionally blocked by the v1 dynamic-execution allowlist; legacy workflow outputs still run normally.
+                    Skipped tools were intentionally blocked by the v2 dynamic-execution allowlist; legacy workflow outputs still run normally.
                   </p>
                 </div>
-                <Badge tone="skipped">v1 guarded</Badge>
+                <Badge tone="skipped">v2 guarded</Badge>
               </div>
 
               {agentExecutions.length > 0 ? (
@@ -695,7 +695,7 @@ export default async function WorkflowRunDetailsPage({
                           </p>
                           {execution.status === "skipped" ? (
                             <p className="mt-3 text-xs font-medium text-amber-200/80">
-                              Intentionally blocked by the dynamic execution v1 allowlist.
+                              Intentionally blocked by the dynamic execution v2 allowlist.
                             </p>
                           ) : null}
                         </div>
