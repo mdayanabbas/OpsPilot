@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ApprovalActions } from "../../../components/approvals/ApprovalActions";
+import { WorkflowReplayPanel } from "../../../components/replays/WorkflowReplayPanel";
 
 type WorkflowRun = {
   id: number;
@@ -651,6 +652,8 @@ export default async function WorkflowRunDetailsPage({
                 <EmptyState>No planner decision has been recorded for this run yet.</EmptyState>
               )}
             </Panel>
+
+            <WorkflowReplayPanel workflowRunId={workflow.id} />
 
             <Panel title="Agent Execution" eyebrow="Dynamic tool executor v2">
               <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-amber-300/[0.055] p-4 sm:flex-row sm:items-center sm:justify-between">
