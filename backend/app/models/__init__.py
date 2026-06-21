@@ -11,6 +11,7 @@ from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 from app.models.processed_email import ProcessedEmail
 from app.models.incident import Incident
 from app.models.incident_response_plan import IncidentResponsePlan
+from app.models.incident_execution_trace import IncidentExecutionTrace
 from app.models.planner_decision import PlannerDecision
 from app.models.critic_result import CriticResult
 from app.models.agent_execution_trace import AgentExecutionTrace
@@ -32,6 +33,7 @@ __all__ = [
     "ProcessedEmail",
     "Incident",
     "IncidentResponsePlan",
+    "IncidentExecutionTrace",
     "PlannerDecision",
     "CriticResult",
     "AgentExecutionTrace",

@@ -27,3 +27,8 @@ class Incident(Base):
         back_populates="incident",
         cascade="all, delete-orphan",
     )
+    execution_traces = relationship(
+        "IncidentExecutionTrace",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+    )

@@ -22,3 +22,8 @@ class IncidentResponsePlan(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     incident = relationship("Incident", back_populates="response_plans")
+    execution_traces = relationship(
+        "IncidentExecutionTrace",
+        back_populates="response_plan",
+        cascade="all, delete-orphan",
+    )

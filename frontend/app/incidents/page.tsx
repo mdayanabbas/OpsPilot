@@ -32,6 +32,17 @@ type IncidentResponsePlan = {
   created_at: string;
 };
 
+type IncidentExecutionTrace = {
+  id: number;
+  incident_id: number;
+  response_plan_id: number;
+  tool_name: string;
+  status: "executed" | "skipped" | "error" | string;
+  result_summary: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const NAV_ITEMS = [
   ["Dashboard", "/"],
@@ -59,6 +70,12 @@ function severityTone(severity: string) {
   return "border-amber-300/30 bg-amber-300/15 text-amber-100";
 }
 
+function executionTone(status: string) {
+  if (status === "executed") return "border-emerald-300/30 bg-emerald-300/10 text-emerald-100";
+  if (status === "error") return "border-rose-300/30 bg-rose-300/10 text-rose-100";
+  return "border-amber-300/30 bg-amber-300/10 text-amber-100";
+}
+
 function Badge({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>{children}</span>;
 }
@@ -82,6 +99,8 @@ function MetricCard({ label, value, tone = "default" }: { label: string; value: 
 export default function IncidentsPage() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [responsePlans, setResponsePlans] = useState<Record<number, IncidentResponsePlan>>({});
+  const [executionTraces, setExecutionTraces] = useState<Record<number, IncidentExecutionTrace[]>>({});
+  const [executingIncidentId, setExecutingIncidentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +134,18 @@ export default function IncidentsPage() {
             ),
           ),
         );
+
+        const executionEntries = await Promise.all(
+          loadedIncidents.map(async (incident) => {
+            const executionResponse = await fetch(
+              `${API_BASE_URL}/api/v1/incidents/${incident.id}/executions`,
+              { cache: "no-store" },
+            );
+            if (!executionResponse.ok) return [incident.id, []] as const;
+            return [incident.id, (await executionResponse.json()) as IncidentExecutionTrace[]] as const;
+          }),
+        );
+        setExecutionTraces(Object.fromEntries(executionEntries));
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : "Unable to load incidents.");
       } finally {
@@ -128,6 +159,34 @@ export default function IncidentsPage() {
   const criticalCount = incidents.filter((incident) => incident.severity === "critical").length;
   const highCount = incidents.filter((incident) => incident.severity === "high").length;
   const totalAffected = incidents.reduce((total, incident) => total + incident.workflow_count, 0);
+
+  async function executeResponsePlan(incidentId: number) {
+    setExecutingIncidentId(incidentId);
+    setError(null);
+    try {
+      const executeResponse = await fetch(
+        `${API_BASE_URL}/api/v1/incidents/${incidentId}/execute`,
+        { method: "POST" },
+      );
+      if (!executeResponse.ok) {
+        throw new Error(`Failed to execute response plan: ${executeResponse.status}`);
+      }
+
+      const tracesResponse = await fetch(
+        `${API_BASE_URL}/api/v1/incidents/${incidentId}/executions`,
+        { cache: "no-store" },
+      );
+      if (!tracesResponse.ok) {
+        throw new Error(`Failed to refresh execution traces: ${tracesResponse.status}`);
+      }
+      const traces = (await tracesResponse.json()) as IncidentExecutionTrace[];
+      setExecutionTraces((current) => ({ ...current, [incidentId]: traces }));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to execute response plan.");
+    } finally {
+      setExecutingIncidentId(null);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#05070b] text-slate-100">
@@ -293,8 +352,11 @@ export default function IncidentsPage() {
                               <p className="mt-3 text-sm leading-7 text-slate-300">
                                 {responsePlans[incident.id].reasoning}
                               </p>
-                              <p className="mt-3 text-xs text-slate-500">
+                              <p className="hidden">
                                 Planned {dateTime(responsePlans[incident.id].created_at)} · No actions executed
+                              </p>
+                              <p className="mt-3 text-xs text-slate-500">
+                                Planned {dateTime(responsePlans[incident.id].created_at)} &middot; No actions executed
                               </p>
                             </div>
 
@@ -317,6 +379,68 @@ export default function IncidentsPage() {
                         ) : (
                           <div className="p-5 text-sm text-slate-400">Preparing response plan...</div>
                         )}
+                      </div>
+
+                      <div className="mt-5 overflow-hidden rounded-3xl border border-emerald-300/15 bg-emerald-300/[0.04] shadow-xl shadow-emerald-950/10">
+                        <div className="flex flex-col gap-3 border-b border-emerald-300/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200/60">
+                              Explicit read-only execution
+                            </p>
+                            <h4 className="mt-1 text-base font-semibold text-white">Incident Response Execution</h4>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Only memory search and founder summary are allowed. Email alerts remain blocked.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={
+                              executingIncidentId === incident.id
+                              || !responsePlans[incident.id]
+                              || (executionTraces[incident.id] ?? []).length > 0
+                            }
+                            onClick={() => executeResponsePlan(incident.id)}
+                            className="rounded-xl border border-emerald-300/25 bg-emerald-300/10 px-4 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {executingIncidentId === incident.id
+                              ? "Executing..."
+                              : (executionTraces[incident.id] ?? []).length > 0
+                                ? "Plan executed"
+                                : "Execute response plan"}
+                          </button>
+                        </div>
+
+                        <div className="space-y-3 p-5">
+                          {(executionTraces[incident.id] ?? []).length ? (
+                            executionTraces[incident.id]
+                              .slice(-Math.max(responsePlans[incident.id]?.next_tools.length ?? 1, 1))
+                              .map((trace) => (
+                              <div key={trace.id} className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                  <div>
+                                    <p className="font-mono text-sm font-semibold text-white">{trace.tool_name}</p>
+                                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                                      {trace.result_summary || trace.error_message || "No execution summary recorded."}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Badge className={executionTone(trace.status)}>{trace.status}</Badge>
+                                    <span className="text-xs text-slate-500">{dateTime(trace.created_at)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              ))
+                          ) : (
+                            <div className="rounded-2xl border border-dashed border-white/10 bg-black/15 p-4 text-sm text-slate-400">
+                              No execution traces yet. Execution starts only when you click the button.
+                            </div>
+                          )}
+                          {(executionTraces[incident.id] ?? []).length > (responsePlans[incident.id]?.next_tools.length ?? 0) ? (
+                            <p className="text-xs text-slate-500">
+                              Earlier duplicate traces are hidden. This response plan is now protected from repeat execution.
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="mt-5 grid gap-3 text-xs text-slate-500 md:grid-cols-2">
