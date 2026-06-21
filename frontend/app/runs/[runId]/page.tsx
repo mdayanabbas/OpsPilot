@@ -110,6 +110,17 @@ type PlannerDecision = {
   created_at: string;
 };
 
+type AgentExecutionTrace = {
+  id: number;
+  workflow_run_id: number;
+  planner_decision_id: number;
+  tool_name: string;
+  status: "executed" | "skipped" | "error" | string;
+  result_summary: string | null;
+  error_message: string | null;
+  created_at: string;
+};
+
 type WorkflowOutputs = {
   workflow_run: WorkflowRun;
   tickets: Ticket[];
@@ -185,11 +196,11 @@ function dateTime(value: string) {
 }
 
 function toneClass(tone: string) {
-  if (tone === "completed" || tone === "success" || tone === "low" || tone === "healthy" || tone === "passed") {
+  if (tone === "completed" || tone === "executed" || tone === "success" || tone === "low" || tone === "healthy" || tone === "passed") {
     return "border-emerald-400/25 bg-emerald-400/10 text-emerald-200 shadow-emerald-950/30";
   }
 
-  if (tone === "failed" || tone === "high" || tone === "degraded" || tone === "blocked") {
+  if (tone === "failed" || tone === "error" || tone === "high" || tone === "degraded" || tone === "blocked") {
     return "border-rose-400/25 bg-rose-400/10 text-rose-200 shadow-rose-950/30";
   }
 
@@ -391,13 +402,14 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision] = await Promise.all([
+  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision, agentExecutions] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
     fetchJson<MemoryItem[]>(`/api/v1/workflows/${runId}/memory`),
     fetchOptionalJson<CriticResult>(`/api/v1/workflows/${runId}/critic`),
     fetchOptionalJson<PlannerDecision>(`/api/v1/workflows/${runId}/planner`),
+    fetchJson<AgentExecutionTrace[]>(`/api/v1/workflows/${runId}/agent-executions`),
   ]);
 
   const ticket = outputs.tickets[0];
@@ -637,6 +649,78 @@ export default async function WorkflowRunDetailsPage({
                 </div>
               ) : (
                 <EmptyState>No planner decision has been recorded for this run yet.</EmptyState>
+              )}
+            </Panel>
+
+            <Panel title="Agent Execution" eyebrow="Dynamic tool executor v2">
+              <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-300/15 bg-amber-300/[0.055] p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-100">Safety allowlist active</p>
+                  <p className="mt-1 text-xs leading-5 text-amber-100/65">
+                    Skipped tools were intentionally blocked by the v2 dynamic-execution allowlist; legacy workflow outputs still run normally.
+                  </p>
+                </div>
+                <Badge tone="skipped">v2 guarded</Badge>
+              </div>
+
+              {agentExecutions.length > 0 ? (
+                <div className="space-y-3">
+                  {agentExecutions.map((execution) => (
+                    <article
+                      key={execution.id}
+                      className="overflow-hidden rounded-3xl border border-white/10 bg-[#090d16] shadow-xl shadow-black/15"
+                    >
+                      <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.025] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Planner Decision #{execution.planner_decision_id}
+                          </p>
+                          <h3 className="mt-2 truncate font-mono text-sm font-semibold text-white">
+                            {execution.tool_name}
+                          </h3>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={execution.status}>{titleize(execution.status)}</Badge>
+                          <span className="text-xs text-slate-500">{dateTime(execution.created_at)}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-4 p-5 lg:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Result Summary
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-slate-300">
+                            {execution.result_summary || "No result summary recorded."}
+                          </p>
+                          {execution.status === "skipped" ? (
+                            <p className="mt-3 text-xs font-medium text-amber-200/80">
+                              Intentionally blocked by the dynamic execution v2 allowlist.
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div
+                          className={cx(
+                            "rounded-2xl border p-4",
+                            execution.error_message
+                              ? "border-rose-300/20 bg-rose-300/[0.055]"
+                              : "border-white/10 bg-black/20",
+                          )}
+                        >
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                            Error Message
+                          </p>
+                          <p className={cx("mt-2 text-sm leading-6", execution.error_message ? "text-rose-100" : "text-slate-500")}>
+                            {execution.error_message || "None"}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState>No dynamic agent execution traces were recorded for this run.</EmptyState>
               )}
             </Panel>
 
