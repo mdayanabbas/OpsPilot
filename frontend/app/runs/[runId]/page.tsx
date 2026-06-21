@@ -88,6 +88,9 @@ type CriticResult = {
   quality_notes: string[];
   recommended_action: string;
   requires_manual_review: boolean;
+  created_at: string;
+};
+
 type PlannerTool = {
   tool_name: string;
   reason: string;
@@ -101,6 +104,9 @@ type PlannerDecision = {
   next_tools: PlannerTool[];
   requires_human_approval: boolean;
   reasoning_summary: string;
+  planner_provider: string;
+  used_fallback: boolean;
+  raw_reasoning: string;
   created_at: string;
 };
 
@@ -256,6 +262,18 @@ function providerLabel(provider: string | null | undefined, fallbackUsed = false
   return "Gemini";
 }
 
+function plannerReasoningSource(plannerDecision: PlannerDecision) {
+  if (plannerDecision.raw_reasoning?.trim()) {
+    return "LLM reasoning";
+  }
+
+  if (plannerDecision.used_fallback) {
+    return "Deterministic fallback";
+  }
+
+  return "Deterministic rules";
+}
+
 function logicalToolLabel(toolName: string) {
   return titleize(
     toolName
@@ -373,8 +391,7 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls, memoryItems, criticResult] = await Promise.all([
-  const [workflow, outputs, toolCalls, memoryItems, plannerDecision] = await Promise.all([
+  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
@@ -560,7 +577,7 @@ export default async function WorkflowRunDetailsPage({
             <Panel title="Planner Decision" eyebrow="Agent orchestration">
               {plannerDecision ? (
                 <div className="space-y-5">
-                  <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr]">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     <MetricTile label="Plan Type" value={titleize(plannerDecision.plan_type)} />
                     <MetricTile
                       label="Human Approval"
@@ -571,6 +588,21 @@ export default async function WorkflowRunDetailsPage({
                       label="Planned Tools"
                       value={String(plannerDecision.next_tools.length)}
                       hint={dateTime(plannerDecision.created_at)}
+                    />
+                    <MetricTile
+                      label="Planner Provider"
+                      value={providerLabel(plannerDecision.planner_provider, plannerDecision.used_fallback)}
+                      tone={plannerDecision.used_fallback ? "medium" : "healthy"}
+                    />
+                    <MetricTile
+                      label="Fallback Used"
+                      value={plannerDecision.used_fallback ? "Yes" : "No"}
+                      tone={plannerDecision.used_fallback ? "medium" : "healthy"}
+                    />
+                    <MetricTile
+                      label="Reasoning Source"
+                      value={plannerReasoningSource(plannerDecision)}
+                      tone={plannerDecision.raw_reasoning ? "healthy" : "default"}
                     />
                   </div>
 
@@ -610,7 +642,6 @@ export default async function WorkflowRunDetailsPage({
 
             <Panel title="Workflow Timeline" eyebrow="Connected agent stages">
               <div className="grid gap-4 xl:grid-cols-7">
-              <div className="grid gap-4 xl:grid-cols-6">
                 {TIMELINE_STEPS.map(([key, label, description], index) => {
                   const state = timelineStatus(key, workflow, outputs, toolCalls, criticResult);
 

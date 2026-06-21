@@ -16,6 +16,9 @@ class PlannerDecision(Base):
     next_tools = Column(Text, nullable=False)
     requires_human_approval = Column(Boolean, nullable=False, default=False)
     reasoning_summary = Column(Text, nullable=False)
+    planner_provider = Column(String(50), nullable=False, default="deterministic")
+    used_fallback = Column(Boolean, nullable=False, default=False)
+    raw_reasoning = Column(Text, nullable=False, default="")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

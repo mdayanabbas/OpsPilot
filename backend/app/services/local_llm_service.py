@@ -17,19 +17,40 @@ class LocalLLMServiceError(Exception):
 
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+
     try:
-        return json.loads(text)
+        parsed = json.loads(stripped)
     except json.JSONDecodeError:
-        pass
+        parsed = None
+    else:
+        if isinstance(parsed, str):
+            return _extract_json_object(parsed)
+        if isinstance(parsed, dict):
+            return parsed
+        raise LocalLLMServiceError("Local LLM JSON response must be an object.")
 
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        raise LocalLLMServiceError("No JSON object found in local LLM response.")
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", stripped):
+        try:
+            parsed, _ = decoder.raw_decode(stripped[match.start() :])
+        except json.JSONDecodeError as exc:
+            print(f"[local_llm_service] JSON parse error={exc}")
+            continue
 
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError as exc:
-        raise LocalLLMServiceError(f"Invalid JSON from local LLM: {exc}") from exc
+        if isinstance(parsed, str):
+            return _extract_json_object(parsed)
+        if isinstance(parsed, dict):
+            return parsed
+
+    raise LocalLLMServiceError("No JSON object found in local LLM response.")
 
 
 def generate_json_local(prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:

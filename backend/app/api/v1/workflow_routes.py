@@ -8,6 +8,7 @@ from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.founder_summary_node import generate_founder_summary
 from app.agents.nodes.intent_router_node import detect_workflow_intent
 from app.agents.nodes.issue_extraction_node import extract_issues
+from app.agents.nodes.issue_normalization_node import normalize_issue_result
 from app.agents.nodes.planner_node import plan_next_actions
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
@@ -117,14 +118,30 @@ def _save_planner_decision(
     workflow_run_id: int,
     planner_result: dict,
 ) -> PlannerDecision:
+    planner_provider = planner_result.get("planner_provider", "deterministic")
+    used_fallback = bool(planner_result.get("used_fallback", False))
+
     planner_decision = PlannerDecision(
         workflow_run_id=workflow_run_id,
         plan_type=planner_result["plan_type"],
         next_tools=json.dumps(planner_result["next_tools"]),
         requires_human_approval=planner_result["requires_human_approval"],
         reasoning_summary=planner_result["reasoning_summary"],
+        planner_provider=planner_provider,
+        used_fallback=used_fallback,
+        raw_reasoning=planner_result.get("raw_reasoning", ""),
     )
-    db.add(planner_decision)
+    planner_tool_call = ToolCall(
+        workflow_run_id=workflow_run_id,
+        step_name="planner",
+        tool_name="planner_node",
+        provider=planner_provider,
+        status="success",
+        attempt=1,
+        fallback_used=used_fallback,
+        error_message=None,
+    )
+    db.add_all([planner_decision, planner_tool_call])
     db.commit()
     db.refresh(planner_decision)
     return planner_decision
@@ -146,6 +163,9 @@ def _planner_payload(planner_decision: PlannerDecision) -> dict:
         "next_tools": next_tools,
         "requires_human_approval": planner_decision.requires_human_approval,
         "reasoning_summary": planner_decision.reasoning_summary,
+        "planner_provider": planner_decision.planner_provider,
+        "used_fallback": planner_decision.used_fallback,
+        "raw_reasoning": planner_decision.raw_reasoning,
         "created_at": planner_decision.created_at,
     }
 
@@ -192,51 +212,6 @@ def _critic_result_response(critic: CriticResult) -> CriticResultResponse:
         recommended_action=critic.recommended_action,
         requires_manual_review=critic.requires_manual_review,
         created_at=critic.created_at,
-def _save_planner_decision(
-    db: Session,
-    workflow_run_id: int,
-    planner_result: dict,
-) -> PlannerDecision:
-    planner_decision = PlannerDecision(
-        workflow_run_id=workflow_run_id,
-        plan_type=planner_result["plan_type"],
-        next_tools=json.dumps(planner_result["next_tools"]),
-        requires_human_approval=planner_result["requires_human_approval"],
-        reasoning_summary=planner_result["reasoning_summary"],
-    )
-    planner_tool_call = ToolCall(
-        workflow_run_id=workflow_run_id,
-        step_name="planner",
-        tool_name="planner_node",
-        provider="deterministic",
-        status="success",
-        attempt=1,
-        fallback_used=False,
-        error_message=None,
-    )
-    db.add_all([planner_decision, planner_tool_call])
-    db.commit()
-    db.refresh(planner_decision)
-    return planner_decision
-
-
-def _planner_decision_response(planner_decision: PlannerDecision) -> PlannerDecisionResponse:
-    try:
-        next_tools = json.loads(planner_decision.next_tools)
-    except (TypeError, json.JSONDecodeError):
-        next_tools = []
-
-    if not isinstance(next_tools, list):
-        next_tools = []
-
-    return PlannerDecisionResponse(
-        id=planner_decision.id,
-        workflow_run_id=planner_decision.workflow_run_id,
-        plan_type=planner_decision.plan_type,
-        next_tools=next_tools,
-        requires_human_approval=planner_decision.requires_human_approval,
-        reasoning_summary=planner_decision.reasoning_summary,
-        created_at=planner_decision.created_at,
     )
 
 
@@ -476,7 +451,8 @@ def _execute_workflow_run_sync(
     db.commit()
 
     try:
-        issue_result = extract_issues(payload.input_text)
+        extracted_issue_result = extract_issues(payload.input_text)
+        issue_result = normalize_issue_result(payload.input_text, extracted_issue_result)
         issues = issue_result.get("issues", [])
         if not isinstance(issues, list):
             issues = []
@@ -540,8 +516,8 @@ def _execute_workflow_run_sync(
         planner_result = plan_next_actions(
             {
                 "workflow_type": workflow_run.workflow_type,
-                "confidence": workflow_run.confidence,
-                "requires_clarification": True,
+                "confidence": issue_result.get("confidence", workflow_run.confidence),
+                "requires_clarification": issue_result.get("requires_clarification", True),
                 "fallback_used": _result_fallback_used(issue_result),
             }
         )
@@ -583,8 +559,8 @@ def _execute_workflow_run_sync(
                 for memory_item in memory_matches
             ],
             "incident_detected": False,
-            "confidence": workflow_run.confidence,
-            "requires_clarification": False,
+            "confidence": issue_result.get("confidence", workflow_run.confidence),
+            "requires_clarification": issue_result.get("requires_clarification", False),
             "fallback_used": (
                 _result_fallback_used(intent_result)
                 or _result_fallback_used(issue_result)
@@ -592,17 +568,15 @@ def _execute_workflow_run_sync(
         }
     )
     planner_decision = _save_planner_decision(db, workflow_run.id, planner_result)
-    planner_tool_call = ToolCall(
-        workflow_run_id=workflow_run.id,
-        step_name="planner",
-        tool_name="planner_node",
-        provider="deterministic",
-        status="success",
-        attempt=1,
-        fallback_used=False,
-        error_message=None,
+    planner_tool_call = (
+        db.query(ToolCall)
+        .filter(
+            ToolCall.workflow_run_id == workflow_run.id,
+            ToolCall.step_name == "planner",
+        )
+        .order_by(ToolCall.created_at.desc(), ToolCall.id.desc())
+        .first()
     )
-    _save_planner_decision(db, workflow_run.id, planner_result)
     if planner_result["plan_type"] == "clarification":
         workflow_run.status = "needs_clarification"
         db.commit()
@@ -689,11 +663,12 @@ def _execute_workflow_run_sync(
 
     starter_tool_calls = [
         intent_tool_call,
-        planner_tool_call,
         issue_extraction_tool_call,
         ticket_tool_call,
         reply_tool_call,
     ]
+    if planner_tool_call:
+        starter_tool_calls.insert(1, planner_tool_call)
 
     ticket = Ticket(
         workflow_run_id=workflow_run.id,
@@ -765,7 +740,6 @@ def _execute_workflow_run_sync(
             "reply": reply_result,
             "evaluation": evaluation_result,
             "planner_decision": _planner_payload(planner_decision),
-            "planner_decision": None,
             "memory_matches": [
                 _memory_payload(memory_item)
                 for memory_item in memory_matches
@@ -926,10 +900,6 @@ def get_workflow_planner_decision(workflow_run_id: int, db: Session = Depends(ge
 
 @router.get("/{workflow_run_id}/critic", response_model=CriticResultResponse)
 def get_workflow_critic_result(workflow_run_id: int, db: Session = Depends(get_db)):
-@router.get("/{workflow_run_id}/critic", response_model=CriticResultResponse)
-def get_workflow_critic_result(workflow_run_id: int, db: Session = Depends(get_db)):
-@router.get("/{workflow_run_id}/planner", response_model=PlannerDecisionResponse)
-def get_workflow_planner_decision(workflow_run_id: int, db: Session = Depends(get_db)):
     workflow_run = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_run_id).first()
 
     if not workflow_run:
@@ -946,17 +916,6 @@ def get_workflow_planner_decision(workflow_run_id: int, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Critic result not found")
 
     return _critic_result_response(critic)
-    planner_decision = (
-        db.query(PlannerDecision)
-        .filter(PlannerDecision.workflow_run_id == workflow_run_id)
-        .order_by(PlannerDecision.created_at.desc(), PlannerDecision.id.desc())
-        .first()
-    )
-
-    if not planner_decision:
-        raise HTTPException(status_code=404, detail="Planner decision not found")
-
-    return _planner_decision_response(planner_decision)
 
 
 @router.get("/{workflow_run_id}/outputs")
