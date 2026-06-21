@@ -6,7 +6,8 @@ The project combines LLM-assisted reasoning with deterministic normalization, va
 
 ## Architecture Diagram
 
-<img width="1724" height="7228" alt="fiaa" src="https://github.com/user-attachments/assets/76b8846d-c409-4eb3-bbdf-eb71ca26cc5f" />
+<img width="2060" height="4684" alt="woha&#39;" src="https://github.com/user-attachments/assets/df61a1a9-1e41-4097-95ff-7e5444fc09fc" />
+
 
 
 ## What OpsPilot Does
