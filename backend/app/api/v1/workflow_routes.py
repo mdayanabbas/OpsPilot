@@ -26,6 +26,7 @@ from app.models.summary import FounderSummary
 from app.models.ticket import Ticket
 from app.models.tool_call import ToolCall
 from app.models.workflow import WorkflowRun
+from app.models.workflow_replay import WorkflowReplay
 from app.schemas.agent_step_schema import AgentStepResponse
 from app.schemas.agent_execution_trace_schema import AgentExecutionTraceResponse
 from app.schemas.critic_result_schema import CriticResultResponse
@@ -37,8 +38,13 @@ from app.schemas.tool_call_schema import ToolCallResponse
 from app.schemas.workflow_schema import WorkflowRunCreate, WorkflowRunResponse
 from app.schemas.memory_schema import MemoryItemResponse
 from app.schemas.planner_decision_schema import PlannerDecisionResponse
+from app.schemas.workflow_replay_schema import WorkflowReplayResponse
 from app.services.memory_service import save_memory_from_workflow, search_memory
 from app.services.incident_service import detect_incidents
+from app.services.workflow_replay_service import (
+    compare_workflow_runs,
+    replay_workflow_run,
+)
 
 router = APIRouter()
 
@@ -892,6 +898,62 @@ def workflow_run_endpoint_hint():
         status_code=405,
         detail="Use POST /api/v1/workflows/run with JSON body: {'input_text': '...'}",
     )
+
+
+def _workflow_replay_payload(db: Session, replay: WorkflowReplay) -> dict:
+    diff = compare_workflow_runs(
+        db,
+        replay.source_workflow_run_id,
+        replay.replay_workflow_run_id,
+    )
+    return {
+        "replay_id": replay.id,
+        **diff,
+        "status": replay.status,
+        "diff_summary": replay.diff_summary or diff["summary"],
+        "created_at": replay.created_at,
+    }
+
+
+@router.get("/replays/{replay_id}", response_model=WorkflowReplayResponse)
+def get_workflow_replay(replay_id: int, db: Session = Depends(get_db)):
+    replay = db.query(WorkflowReplay).filter(WorkflowReplay.id == replay_id).first()
+    if not replay:
+        raise HTTPException(status_code=404, detail="Workflow replay not found")
+    return _workflow_replay_payload(db, replay)
+
+
+@router.post(
+    "/{workflow_run_id}/replay",
+    response_model=WorkflowReplayResponse,
+)
+def replay_existing_workflow(workflow_run_id: int, db: Session = Depends(get_db)):
+    try:
+        return replay_workflow_run(db, workflow_run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{workflow_run_id}/replays",
+    response_model=list[WorkflowReplayResponse],
+)
+def list_workflow_replays(workflow_run_id: int, db: Session = Depends(get_db)):
+    workflow_run = (
+        db.query(WorkflowRun)
+        .filter(WorkflowRun.id == workflow_run_id)
+        .first()
+    )
+    if not workflow_run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+
+    replays = (
+        db.query(WorkflowReplay)
+        .filter(WorkflowReplay.source_workflow_run_id == workflow_run_id)
+        .order_by(WorkflowReplay.created_at.desc(), WorkflowReplay.id.desc())
+        .all()
+    )
+    return [_workflow_replay_payload(db, replay) for replay in replays]
 
 
 @router.get("/{workflow_run_id}", response_model=WorkflowRunResponse)

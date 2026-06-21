@@ -15,6 +15,7 @@ from app.models.incident_execution_trace import IncidentExecutionTrace
 from app.models.planner_decision import PlannerDecision
 from app.models.critic_result import CriticResult
 from app.models.agent_execution_trace import AgentExecutionTrace
+from app.models.workflow_replay import WorkflowReplay
 from app.models.critic_result import CriticResult
 from app.models.planner_decision import PlannerDecision
 
@@ -37,6 +38,7 @@ __all__ = [
     "PlannerDecision",
     "CriticResult",
     "AgentExecutionTrace",
+    "WorkflowReplay",
     "CriticResult",
     "PlannerDecision",
 ]
