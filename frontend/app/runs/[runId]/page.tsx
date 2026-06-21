@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ApprovalActions } from "../../../components/approvals/ApprovalActions";
 import { WorkflowReplayPanel } from "../../../components/replays/WorkflowReplayPanel";
+import { AgentTraceFlow } from "../../../components/workflows/AgentTraceFlow";
 
 type WorkflowRun = {
   id: number;
@@ -120,6 +121,12 @@ type AgentExecutionTrace = {
   result_summary: string | null;
   error_message: string | null;
   created_at: string;
+};
+
+type WorkflowReplayGraphItem = {
+  replay_workflow_run_id: number;
+  changed: boolean;
+  diff_summary: string;
 };
 
 type WorkflowOutputs = {
@@ -403,7 +410,7 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision, agentExecutions] = await Promise.all([
+  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision, agentExecutions, replayHistory] = await Promise.all([
     fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
@@ -411,6 +418,7 @@ export default async function WorkflowRunDetailsPage({
     fetchOptionalJson<CriticResult>(`/api/v1/workflows/${runId}/critic`),
     fetchOptionalJson<PlannerDecision>(`/api/v1/workflows/${runId}/planner`),
     fetchJson<AgentExecutionTrace[]>(`/api/v1/workflows/${runId}/agent-executions`),
+    fetchJson<WorkflowReplayGraphItem[]>(`/api/v1/workflows/${runId}/replays`),
   ]);
 
   const ticket = outputs.tickets[0];
@@ -525,6 +533,17 @@ export default async function WorkflowRunDetailsPage({
                 </div>
               </div>
             </header>
+
+            <AgentTraceFlow
+              key={replayHistory[0]?.replay_workflow_run_id ?? "no-replay"}
+              workflow={workflow}
+              plannerDecision={plannerDecision}
+              agentExecutions={agentExecutions}
+              toolCalls={toolCalls}
+              outputs={outputs}
+              critic={criticResult}
+              replayHistory={replayHistory}
+            />
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               <MetricTile label="Status" value={titleize(workflow.status)} />
