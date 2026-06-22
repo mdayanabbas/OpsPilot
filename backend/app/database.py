@@ -80,6 +80,29 @@ def ensure_database_schema():
                     )
                 )
 
+    if "benchmark_runs" in inspector.get_table_names():
+        benchmark_columns = {
+            column["name"] for column in inspector.get_columns("benchmark_runs")
+        }
+        regression_columns = {
+            "suite_name": "VARCHAR(150) NOT NULL DEFAULT 'legacy'",
+            "cases_run": "INTEGER NOT NULL DEFAULT 0",
+            "avg_score": "FLOAT NOT NULL DEFAULT 0.0",
+            "planner_accuracy": "FLOAT NOT NULL DEFAULT 0.0",
+            "category_accuracy": "FLOAT NOT NULL DEFAULT 0.0",
+            "priority_accuracy": "FLOAT NOT NULL DEFAULT 0.0",
+            "critic_accuracy": "FLOAT NOT NULL DEFAULT 0.0",
+        }
+        with engine.begin() as connection:
+            for column_name, definition in regression_columns.items():
+                if column_name not in benchmark_columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE benchmark_runs "
+                            f"ADD COLUMN {column_name} {definition}"
+                        )
+                    )
+
 
 def get_db():
     db = SessionLocal()
