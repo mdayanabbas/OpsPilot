@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { RegressionDashboard } from "../../components/benchmarks/RegressionDashboard";
 
 type BenchmarkCase = {
   id: string;
@@ -276,6 +277,8 @@ export default function BenchmarksPage() {
                 </div>
               </div>
             </header>
+
+            <RegressionDashboard />
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard label="Benchmark Cases" value={isLoadingCases ? "..." : String(cases.length)} />
