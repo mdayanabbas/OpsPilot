@@ -8,6 +8,13 @@ BILLING_MANUAL_REVIEW_TERMS = {
     "billing",
     "subscription inactive",
 }
+AUTH_MANUAL_REVIEW_TERMS = {
+    "auth", "login", "session", "password reset", "account locked",
+}
+SECURITY_MANUAL_REVIEW_TERMS = {
+    "security", "unauthorized", "data exposure", "exposed data",
+    "permission", "without permission", "privilege escalation",
+}
 REFUND_PROMISE_TERMS = {
     "refund",
     "refunded",
@@ -58,6 +65,22 @@ def _combined_manual_review_text(issue: dict, ticket: dict, reply: dict) -> str:
 def _billing_manual_review_triggered(issue: dict, ticket: dict, reply: dict) -> bool:
     haystack = _combined_manual_review_text(issue, ticket, reply)
     return any(term in haystack for term in BILLING_MANUAL_REVIEW_TERMS)
+
+
+def _policy_warning_category(issue: dict, ticket: dict, reply: dict) -> str | None:
+    category = _issue_category(issue)
+    haystack = _combined_manual_review_text(issue, ticket, reply)
+    if category == "billing" or any(
+        term in haystack for term in BILLING_MANUAL_REVIEW_TERMS
+    ):
+        return "billing"
+    if category == "auth" or any(term in haystack for term in AUTH_MANUAL_REVIEW_TERMS):
+        return "auth"
+    if category == "security" or any(
+        term in haystack for term in SECURITY_MANUAL_REVIEW_TERMS
+    ):
+        return "security"
+    return None
 
 
 def _planner_requires_human_review(context: dict) -> bool:
@@ -141,13 +164,15 @@ def critique_workflow_output(context: dict) -> dict:
     if category in SENSITIVE_CATEGORIES and not (reply_requires_approval or ticket_requires_approval):
         risk_flags.append(f"{category} issue is missing an approval requirement.")
 
-    if _billing_manual_review_triggered(issue, ticket, reply):
-        print("[critic_node] billing/manual review warning triggered")
-        _append_unique(risk_flags, "billing_risk")
-        _append_unique(risk_flags, "refund_escalation_risk")
-        _append_unique(risk_flags, "customer_impact_risk")
+    warning_category = _policy_warning_category(issue, ticket, reply)
+    if warning_category:
+        print("[critic_node] policy warning triggered")
+        _append_unique(risk_flags, f"{warning_category}_risk")
+        if warning_category == "billing":
+            _append_unique(risk_flags, "refund_escalation_risk")
+            _append_unique(risk_flags, "customer_impact_risk")
         quality_notes.append(
-            "Billing, refund, payment, invoice, duplicate charge, or subscription-impacting language requires manual review."
+            f"{warning_category.title()} policy requires manual review for this workflow."
         )
 
     if planner_requires_human_review:
@@ -163,6 +188,7 @@ def critique_workflow_output(context: dict) -> dict:
         risk_flags.append("Unsupported claim rate is above 0.20.")
 
     if _provider_issue_detected(context):
+        print("[critic_node] policy warning triggered")
         risk_flags.append("Fallback execution or provider failure was detected.")
 
     if blocked:

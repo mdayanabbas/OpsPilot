@@ -9,13 +9,13 @@
     "id": "reg_billing_unpaid_invoice",
     "category": "billing",
     "input_text": "The customer invoice remains unpaid after payment was completed.",
-    "expectation": {"expected_category": "billing", "expected_plan_type": "human_review", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
+    "expectation": {"expected_category": "billing", "expected_plan_type": "human_review", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
   },
   {
     "id": "reg_billing_refund_pending",
     "category": "billing",
     "input_text": "A customer refund is still pending and has not been processed.",
-    "expectation": {"expected_category": "billing", "expected_plan_type": "human_review", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
+    "expectation": {"expected_category": "billing", "expected_plan_type": "human_review", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
   },
   {
     "id": "reg_billing_subscription_inactive",
@@ -33,31 +33,31 @@
     "id": "reg_auth_password_reset_failure",
     "category": "auth",
     "input_text": "Password reset fails and the reset link is expired.",
-    "expectation": {"expected_category": "auth", "expected_plan_type": "human_review", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
+    "expectation": {"expected_category": "auth", "expected_plan_type": "human_review", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
   },
   {
     "id": "reg_auth_session_expiration",
     "category": "auth",
     "input_text": "The user session expired unexpectedly and account access was interrupted.",
-    "expectation": {"expected_category": "auth", "expected_plan_type": "human_review", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
+    "expectation": {"expected_category": "auth", "expected_plan_type": "human_review", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "warning"}
   },
   {
     "id": "reg_performance_dashboard_freeze",
     "category": "performance",
     "input_text": "The dashboard freezes while users export reports.",
-    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
+    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
   },
   {
     "id": "reg_performance_timeout",
     "category": "performance",
     "input_text": "The reports page times out for customers during peak hours.",
-    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
+    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
   },
   {
     "id": "reg_performance_export_hangs",
     "category": "performance",
     "input_text": "The data export hangs and never completes for users.",
-    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "medium", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
+    "expectation": {"expected_category": "performance", "expected_plan_type": "standard_triage", "expected_priority": "high", "expected_requires_approval": true, "expected_workflow_status": "completed", "expected_critic_status": "passed"}
   },
   {
     "id": "reg_notification_otp_missing",
