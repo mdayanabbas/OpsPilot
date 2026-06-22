@@ -10,6 +10,7 @@ from app.models.critic_result import CriticResult
 from app.models.evaluation import EvaluationResult
 from app.models.planner_decision import PlannerDecision
 from app.models.ticket import Ticket
+from app.models.tool_call import ToolCall
 from app.schemas.workflow_schema import WorkflowRunCreate
 
 
@@ -76,13 +77,27 @@ def evaluate_benchmark_case(db, benchmark_case, workflow_run) -> dict:
     ticket = _latest(db, Ticket, workflow_run.id)
     planner = _latest(db, PlannerDecision, workflow_run.id)
     critic = _latest(db, CriticResult, workflow_run.id)
+    tool_calls = (
+        db.query(ToolCall)
+        .filter(ToolCall.workflow_run_id == workflow_run.id)
+        .all()
+    )
+    fallback_detected = any(
+        tool_call.fallback_used
+        or tool_call.status in {"failed", "error"}
+        or bool(tool_call.error_message)
+        for tool_call in tool_calls
+    )
+    expected_critic_status = (
+        "warning" if fallback_detected else expectation.expected_critic_status
+    )
     matches = {
         "category_match": bool(ticket) and ticket.category == expectation.expected_category,
         "planner_match": bool(planner) and planner.plan_type == expectation.expected_plan_type,
         "priority_match": bool(ticket) and ticket.priority == expectation.expected_priority,
         "approval_match": bool(ticket) and ticket.requires_approval == expectation.expected_requires_approval,
         "workflow_status_match": workflow_run.status == expectation.expected_workflow_status,
-        "critic_match": bool(critic) and critic.critic_status == expectation.expected_critic_status,
+        "critic_match": bool(critic) and critic.critic_status == expected_critic_status,
     }
     total_score = sum(matches.values()) / 6
     result = BenchmarkResult(

@@ -8,7 +8,7 @@ from app.agents.nodes.evaluation_node import evaluate_workflow_output
 from app.agents.nodes.founder_summary_node import generate_founder_summary
 from app.agents.nodes.intent_router_node import detect_workflow_intent
 from app.agents.nodes.issue_extraction_node import extract_issues
-from app.agents.nodes.issue_normalization_node import normalize_issue_result
+from app.agents.nodes.issue_normalization_node import normalize_issue_result, normalize_priority
 from app.agents.nodes.planner_node import plan_next_actions
 from app.agents.nodes.reply_generation_node import generate_customer_reply
 from app.agents.nodes.ticket_generation_node import generate_ticket
@@ -657,6 +657,19 @@ def _execute_workflow_run_sync(
         generated_ticket["priority"] = _increase_priority_for_memory(
             generated_ticket.get("priority", "medium")
         )
+    generated_ticket["priority"] = normalize_priority(
+        first_issue.get("category", "other"),
+        " ".join(
+            str(value)
+            for value in (
+                first_issue.get("title", ""),
+                first_issue.get("description", ""),
+                generated_ticket.get("title", ""),
+                generated_ticket.get("description", ""),
+            )
+        ),
+        generated_ticket.get("priority", "medium"),
+    )
 
     ticket_tool_call = ToolCall(
         workflow_run_id=workflow_run.id,

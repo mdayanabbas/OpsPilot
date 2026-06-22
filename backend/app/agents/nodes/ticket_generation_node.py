@@ -1,5 +1,6 @@
 import json
 
+from app.agents.nodes.issue_normalization_node import normalize_priority
 from app.services.gemini_service import GeminiServiceError, generate_json
 
 
@@ -8,6 +9,10 @@ CATEGORY_TO_TEAM = {
     "auth": "backend",
     "ui": "frontend",
     "performance": "backend",
+    "data": "backend",
+    "integration": "backend",
+    "notification": "backend",
+    "security": "backend",
     "other": "backend",
 }
 
@@ -45,9 +50,11 @@ def _clean_text(value: object, default: str) -> str:
 
 def _priority_from_issue(issue: dict) -> str:
     severity = issue.get("severity")
-    if severity in VALID_PRIORITIES:
-        return severity
-    return "medium"
+    current = severity if severity in VALID_PRIORITIES else "medium"
+    issue_text = " ".join(
+        str(issue.get(key, "")) for key in ("title", "description")
+    )
+    return normalize_priority(issue.get("category", "other"), issue_text, current)
 
 
 def _team_from_category(category: str) -> str:
@@ -154,6 +161,10 @@ Rules:
   - auth -> backend
   - ui -> frontend
   - performance -> backend
+  - data -> backend
+  - integration -> backend
+  - notification -> backend
+  - security -> backend
   - other -> backend
 - acceptance_criteria must be a list of short, testable strings
 

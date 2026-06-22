@@ -4,7 +4,10 @@ import unittest
 
 sys.path.insert(0, "backend")
 
-from app.agents.nodes.issue_normalization_node import normalize_issue_result  # noqa: E402
+from app.agents.nodes.issue_normalization_node import (  # noqa: E402
+    normalize_issue_result,
+    normalize_priority,
+)
 
 
 class IssueNormalizationTests(unittest.TestCase):
@@ -44,6 +47,31 @@ class IssueNormalizationTests(unittest.TestCase):
 
         self.assertFalse(result["requires_clarification"])
         self.assertEqual(result["issues"][0]["category"], "integration")
+
+    def test_password_reset_email_missing_is_notification(self):
+        result = self._normalize("The password reset email was not received.")
+
+        self.assertEqual(result["issues"][0]["category"], "notification")
+        self.assertEqual(result["issues"][0]["severity"], "medium")
+
+    def test_security_and_performance_taxonomy(self):
+        security = self._normalize("The account was accessed without permission.")
+        performance = self._normalize("The reports page times out for customers.")
+
+        self.assertEqual(security["issues"][0]["category"], "security")
+        self.assertEqual(security["issues"][0]["severity"], "high")
+        self.assertEqual(performance["issues"][0]["category"], "performance")
+        self.assertEqual(performance["issues"][0]["severity"], "high")
+
+    def test_priority_policy_overrides_generated_priority(self):
+        self.assertEqual(
+            normalize_priority("billing", "A refund is pending.", "medium"),
+            "high",
+        )
+        self.assertEqual(
+            normalize_priority("integration", "CRM sync failed.", "high"),
+            "medium",
+        )
 
     def test_success_only_feedback_requires_clarification(self):
         result = self._normalize("Everything works perfectly.")

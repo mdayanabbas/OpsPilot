@@ -24,6 +24,21 @@ CATEGORY_RULES: dict[str, tuple[str, ...]] = {
     "security": (
         "unauthorized access", "suspicious login", "permission issue",
         "permission denied", "data exposure", "exposed data",
+        "account accessed without permission", "privilege escalation",
+    ),
+    "notification": (
+        "password reset email not received", "verification code missing",
+        "verification code is missing", "otp not received", "otp is not received",
+        "otp never arrived", "email not received", "email is not received",
+        "email never arrived", "notification delayed", "notifications delayed",
+        "delayed notification", "delayed notifications", "alert not sent",
+    ),
+    "integration": (
+        "third-party integration broken", "third party integration broken",
+        "external service sync issue", "webhook not delivered", "webhook failure",
+        "webhook failed", "webhook is failing", "api sync failed", "api sync issue",
+        "crm sync failed", "crm sync issue", "stripe sync failed", "payment sync failure",
+        "webhook sync", "api sync", "crm sync", "sync is failing", "sync failed", "sync failure",
     ),
     "billing": (
         "payment succeeded but", "payment successful but", "subscription inactive",
@@ -37,8 +52,9 @@ CATEGORY_RULES: dict[str, tuple[str, ...]] = {
         "locked out", "reset link expired",
     ),
     "performance": (
-        "high latency", "slow page", "page is slow", "timeout", "times out",
-        "freezing", "freezes", "export hangs", "exporting hangs", "hangs",
+        "request timed out", "page timed out", "dashboard freezes", "export hangs",
+        "export stuck", "slow response", "high latency", "slow page", "page is slow",
+        "timeout", "times out", "timed out", "freezing", "freezes", "exporting hangs", "hangs",
     ),
     "ui": (
         "button broken", "broken button", "modal issue", "modal not opening",
@@ -48,26 +64,17 @@ CATEGORY_RULES: dict[str, tuple[str, ...]] = {
         "missing records", "incorrect reports", "incorrect report", "wrong report",
         "stale dashboard data", "stale data",
     ),
-    "integration": (
-        "webhook failure", "webhook failed", "webhook is failing", "webhook sync",
-        "api sync issue", "api sync", "crm sync issue", "crm sync", "sync is failing",
-        "sync failed", "sync failure",
-    ),
-    "notification": (
-        "email not received", "email never arrived", "otp not received",
-        "otp never arrived", "delayed notification", "delayed notifications",
-        "notification delayed", "notifications delayed",
-    ),
 }
 
 NEGATIVE_SIGNALS = (
     "failed", "failing", "failure", "cannot", "can't", "unable", "not active",
     "not yet active", "inactive", "disabled", "unpaid", "duplicate", "charged twice", "pending", "expired",
-    "locked", "invalid", "timeout", "slow", "latency", "freez", "hang", "broken",
+    "locked", "invalid", "timeout", "times out", "timed out", "slow", "latency", "freez", "hang", "stuck", "broken",
     "overlap", "missing", "incorrect", "wrong", "stale", "not received", "delayed",
     "unauthorized", "suspicious", "denied", "exposure", "not opening",
     "billing issue", "modal issue", "dropdown issue", "api sync issue",
-    "crm sync issue", "permission issue",
+    "crm sync issue", "permission issue", "not delivered", "not sent",
+    "without permission", "privilege escalation",
 )
 
 NO_CUSTOMER_IMPACT_SIGNALS = (
@@ -139,6 +146,52 @@ def _severity_for(text: str, fallback: Any = None) -> str:
     return "medium"
 
 
+def normalize_priority(category: str, input_text: str, current_priority: Any) -> str:
+    """Apply deterministic business priority policy to a generated priority."""
+    category = _text(category).lower()
+    text = _text(input_text).lower()
+    current = _text(current_priority).lower()
+    if current not in SUPPORTED_SEVERITIES:
+        current = "medium"
+
+    high_signals = {
+        "billing": (
+            "refund", "duplicate charge", "charged twice", "subscription inactive",
+            "subscription not active", "subscription is not yet active", "payment failed",
+        ),
+        "auth": (
+            "login failure", "login failed", "cannot login", "can't login",
+            "session expiration", "session expired", "password reset failure",
+            "password reset failed", "password reset fails",
+        ),
+        "performance": (
+            "timeout", "times out", "timed out", "export hangs", "export stuck",
+            "dashboard freeze", "dashboard freezes",
+        ),
+        "security": (
+            "unauthorized", "data exposure", "exposed data", "permission issue",
+            "without permission", "privilege escalation",
+        ),
+    }
+    normalized = current
+    if any(signal in text for signal in high_signals.get(category, ())):
+        normalized = "high"
+    elif category == "integration":
+        normalized = "high" if "payment sync failure" in text else "medium"
+    elif category == "notification" and any(
+        signal in text
+        for signal in (
+            "otp not received", "otp is not received", "verification code missing",
+            "verification code is missing", "email not received", "email is not received",
+        )
+    ):
+        normalized = "medium"
+
+    if normalized != current:
+        print(f"[priority_policy] normalized priority from {current} to {normalized}")
+    return normalized
+
+
 def _title_for(source: str, category: str) -> str:
     compact = " ".join(source.split()).rstrip(" .")
     if not compact:
@@ -160,6 +213,11 @@ def _normalize_one(input_text: str, raw_issue: Any = None) -> dict[str, Any] | N
     category = _category_for(combined, raw.get("category"))
     if category is None:
         return None
+    current_category = _text(raw.get("category")).lower() or "unknown"
+    if current_category != category:
+        print(
+            f"[issue_normalizer] normalized category from {current_category} to {category}"
+        )
 
     description = _text(raw.get("description")) or _text(raw.get("title")) or input_text
     title = _text(raw.get("title")) or _title_for(description, category)
@@ -167,7 +225,7 @@ def _normalize_one(input_text: str, raw_issue: Any = None) -> dict[str, Any] | N
     return {
         "title": title,
         "category": category,
-        "severity": _severity_for(combined, raw.get("severity")),
+        "severity": normalize_priority(category, combined, raw.get("severity")),
         "customer": customer,
         "description": description,
     }
