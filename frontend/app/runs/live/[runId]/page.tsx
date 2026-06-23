@@ -114,7 +114,7 @@ function percent(value: number | null | undefined) {
 
 function providerLabel(provider: string, fallbackUsed = false) {
   if (provider === "local" || provider === "fallback" || fallbackUsed) return "LM Studio";
-  return "Gemini";
+  return "Groq";
 }
 
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) {

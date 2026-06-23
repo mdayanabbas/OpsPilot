@@ -53,7 +53,7 @@ Say:
 
 > The run detail page is the control room. At the top we can see status, confidence, review state, and provider recovery information.
 
-> Execution Insights are derived from tool calls. They show total tool calls, retries, fallback activation, failed calls, successful recoveries, and the primary provider. OpsPilot separates logical tool names from provider names, so the UI does not claim Gemini was used when LM Studio or fallback handled the request.
+> Execution Insights are derived from tool calls. They show total tool calls, retries, fallback activation, failed calls, successful recoveries, and the primary provider. OpsPilot separates logical tool names from provider names, so the UI does not claim Groq was used when LM Studio or fallback handled the request.
 
 > The timeline shows the workflow as stages instead of hiding everything inside one prompt.
 

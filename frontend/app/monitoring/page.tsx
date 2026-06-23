@@ -57,7 +57,7 @@ function dateTime(value: string) {
 
 function providerLabel(provider: string) {
   if (provider === "local" || provider === "fallback") return "LM Studio";
-  if (provider === "gemini") return "Gemini";
+  if (provider === "groq") return "Groq";
   return titleize(provider);
 }
 
@@ -212,7 +212,7 @@ export default function MonitoringPage() {
                     providerRows.map(([provider, count]) => (
                       <div key={provider} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <div className="flex items-center justify-between gap-4">
-                          <Badge tone={provider === "gemini" ? "success" : provider === "unknown" ? "default" : "warning"}>{providerLabel(provider)}</Badge>
+                          <Badge tone={provider === "groq" ? "success" : provider === "unknown" ? "default" : "warning"}>{providerLabel(provider)}</Badge>
                           <span className="text-sm font-semibold text-white">{count}</span>
                         </div>
                         <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
@@ -247,7 +247,7 @@ export default function MonitoringPage() {
                               <p className="text-sm font-semibold text-white">{titleize(failure.step_name)}</p>
                               <p className="mt-1 text-xs text-slate-500">{titleize(failure.tool_name)}</p>
                             </div>
-                            <Badge tone={failure.provider === "gemini" ? "success" : "warning"}>{providerLabel(failure.provider)}</Badge>
+                            <Badge tone={failure.provider === "groq" ? "success" : "warning"}>{providerLabel(failure.provider)}</Badge>
                             <div>
                               <p className="text-xs leading-5 text-rose-100">{failure.error_message ?? "No error message recorded."}</p>
                               <p className="mt-2 text-xs text-slate-500">{dateTime(failure.created_at)}</p>

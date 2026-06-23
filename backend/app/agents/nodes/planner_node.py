@@ -2,7 +2,7 @@ import json
 import re
 
 from app.config import LLM_PROVIDER
-from app.services.gemini_service import GeminiServiceError, generate_json
+from app.services.groq_service import GroqServiceError, generate_json
 
 
 SENSITIVE_CATEGORIES = {"billing", "auth", "refund", "security"}
@@ -415,7 +415,7 @@ Workflow context:
 
 def generate_llm_plan(context: dict) -> dict:
     context = context if isinstance(context, dict) else {}
-    selected_provider = LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local", "auto"} else "local"
+    selected_provider = LLM_PROVIDER if LLM_PROVIDER in {"groq", "local", "auto"} else "groq"
     print(f"[planner] selected provider={selected_provider}")
 
     raw_response = generate_json(_planner_prompt(context), PLANNER_RESPONSE_SCHEMA)
@@ -572,8 +572,8 @@ def _validate_llm_plan(raw_plan: dict, context: dict) -> dict:
         raise PlannerValidationError("Planner reasoning must be a non-empty string.")
 
     provider = raw_plan.get("provider")
-    if provider not in {"gemini", "local", "fallback"}:
-        provider = "gemini"
+    if provider not in {"groq", "local", "fallback"}:
+        provider = "groq"
 
     used_provider_fallback = bool(raw_plan.get("fallback_used")) or provider == "fallback"
 
@@ -595,7 +595,7 @@ def plan_next_actions(context: dict) -> dict:
     try:
         raw_plan = generate_llm_plan(context)
         return _validate_llm_plan(raw_plan, context)
-    except (GeminiServiceError, PlannerParseError, PlannerValidationError, ValueError, TypeError) as exc:
+    except (GroqServiceError, PlannerParseError, PlannerValidationError, ValueError, TypeError) as exc:
         if isinstance(exc, PlannerValidationError):
             print(f"[planner] validation failure reason={exc}")
         print(f"[planner] fallback reason={type(exc).__name__}: {exc}")

@@ -26,8 +26,8 @@ def _safe_provider(tool_call: ToolCall) -> str:
         return "local"
     if "fallback" in tool_name or tool_call.fallback_used:
         return "fallback"
-    if "gemini" in tool_name:
-        return "gemini"
+    if "groq" in tool_name:
+        return "groq"
     return "unknown"
 
 

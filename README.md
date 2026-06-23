@@ -2,7 +2,7 @@
 
 OpsPilot is a measured agentic AI system for customer-feedback triage. It turns unstructured customer reports into normalized issues, engineering tickets, customer-reply drafts, evaluation results, founder summaries, incident signals, and human-review decisions.
 
-The project combines LLM-assisted reasoning with deterministic normalization, validation, allowlists, fallbacks, evaluation, and approval gates. Gemini and a local LM Studio-compatible endpoint are supported through one provider abstraction.
+The project combines LLM-assisted reasoning with deterministic normalization, validation, allowlists, fallbacks, evaluation, and approval gates. Groq and a local LM Studio-compatible endpoint are supported through one provider abstraction.
 
 ## Architecture Diagram
 
@@ -289,14 +289,15 @@ Tickets and replies can be approved or rejected through the approval API. The de
 
 ## Provider Strategy
 
-### Gemini
+### Groq
 
-Gemini uses the Google Gen AI SDK with structured JSON response schemas.
+Groq uses its OpenAI-compatible API with structured JSON response constraints.
 
 ```env
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=your_api_key
-GEMINI_MODEL=gemini-2.5-flash
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_api_key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
 ### Local LM Studio
@@ -313,11 +314,11 @@ LOCAL_LLM_MODEL=your-loaded-model-id
 
 ### Automatic Provider Fallback
 
-Use `auto` to try Gemini first and then LM Studio:
+Use `auto` to try Groq first and then LM Studio:
 
 ```env
 LLM_PROVIDER=auto
-GEMINI_API_KEY=your_api_key
+GROQ_API_KEY=your_api_key
 LOCAL_LLM_ENABLED=true
 LOCAL_LLM_BASE_URL=http://localhost:1234/v1
 LOCAL_LLM_API_KEY=lm-studio
@@ -408,7 +409,7 @@ OpsPilot/
 - Node.js 20 or newer recommended
 - npm
 - One of:
-  - a Gemini API key; or
+  - a Groq API key; or
   - LM Studio running an OpenAI-compatible local server
 
 ### 1. Clone and Enter the Repository
@@ -707,11 +708,11 @@ Check backend logs for:
 
 Common causes:
 
-- `GEMINI_API_KEY` is missing;
+- `GROQ_API_KEY` is missing;
 - `LOCAL_LLM_ENABLED` is false;
 - LM Studio is not running;
 - `LOCAL_LLM_MODEL` does not match the loaded model ID;
-- Gemini or the local model returned an unknown tool or invalid plan type;
+- Groq or the local model returned an unknown tool or invalid plan type;
 - the LLM attempted to bypass required human approval.
 
 ### LM Studio Connection Failure
@@ -748,7 +749,7 @@ Implemented:
 - customer-feedback workflow intent routing;
 - structured issue extraction;
 - deterministic issue normalization and taxonomy validation;
-- hybrid Gemini/LM Studio planner;
+- hybrid Groq/LM Studio planner;
 - deterministic planner validation and fallback;
 - memory search and persistence;
 - ticket and reply draft generation;

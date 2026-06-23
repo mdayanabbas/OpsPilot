@@ -9,20 +9,20 @@ config = types.ModuleType("app.config")
 config.LLM_PROVIDER = "local"
 sys.modules.setdefault("app.config", config)
 
-gemini_service = types.ModuleType("app.services.gemini_service")
+groq_service = types.ModuleType("app.services.groq_service")
 
 
-class GeminiServiceError(RuntimeError):
+class GroqServiceError(RuntimeError):
     pass
 
 
 def generate_json(_prompt, _schema):
-    raise GeminiServiceError("LLM disabled for deterministic planner tests.")
+    raise GroqServiceError("LLM disabled for deterministic planner tests.")
 
 
-gemini_service.GeminiServiceError = GeminiServiceError
-gemini_service.generate_json = generate_json
-sys.modules.setdefault("app.services.gemini_service", gemini_service)
+groq_service.GroqServiceError = GroqServiceError
+groq_service.generate_json = generate_json
+sys.modules.setdefault("app.services.groq_service", groq_service)
 
 from app.agents.nodes.planner_node import plan_next_actions  # noqa: E402
 

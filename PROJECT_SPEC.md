@@ -132,7 +132,7 @@ Depending on workflow outcome, OpsPilot produces:
 
 OpsPilot MAY depend on:
 
-- Gemini through the Google Gen AI SDK;
+- Groq through its OpenAI-compatible API;
 - LM Studio through an OpenAI-compatible local endpoint;
 - IMAP for optional email ingestion;
 - SMTP for optional incident alerts.
@@ -533,7 +533,7 @@ The deterministic validator MUST reject:
 
 Fallback planning MUST remain available when:
 
-- Gemini is unavailable;
+- Groq is unavailable;
 - LM Studio is unavailable;
 - both providers fail in automatic mode;
 - provider JSON cannot be parsed;
@@ -599,20 +599,20 @@ Sensitive credentials MUST NOT be logged.
 
 Supported values for `LLM_PROVIDER` are:
 
-- `gemini`
+- `groq`
 - `local`
 - `auto`
 
 Unknown values SHOULD resolve to a safe configured default.
 
-### 13.2 Gemini
+### 13.2 Groq
 
-Gemini requires:
+Groq requires:
 
-- `GEMINI_API_KEY`;
-- `GEMINI_MODEL`, defaulting to `gemini-2.5-flash`.
+- `GROQ_API_KEY`;
+- `GROQ_MODEL`, defaulting to `llama-3.3-70b-versatile`.
 
-Gemini structured responses SHOULD use an application/json response MIME type and response schema.
+Groq structured responses SHOULD use JSON-object response format with the application schema supplied as output constraints.
 
 ### 13.3 Local LM Studio
 
@@ -629,8 +629,8 @@ The endpoint MUST be OpenAI API compatible.
 
 In `auto` mode, OpsPilot SHOULD:
 
-1. attempt Gemini;
-2. log Gemini failure without exposing secrets;
+1. attempt Groq;
+2. log Groq failure without exposing secrets;
 3. attempt the local provider;
 4. mark local success as provider fallback;
 5. raise a provider error if both attempts fail.
@@ -817,7 +817,7 @@ The summary SHOULD include:
 
 Provider labels SHOULD distinguish:
 
-- Gemini;
+- Groq;
 - local LM Studio;
 - provider fallback;
 - deterministic execution;
@@ -1018,7 +1018,7 @@ Future production versions SHOULD define latency, throughput, availability, and 
 2. Additive response fields SHOULD have safe defaults for existing database rows.
 3. Existing workflow history SHOULD remain readable after additive schema updates.
 4. Frontend provider labels SHOULD tolerate legacy or unknown provider values.
-5. Local development SHOULD work with either Gemini or LM Studio configuration.
+5. Local development SHOULD work with either Groq or LM Studio configuration.
 
 ## 33. Acceptance Criteria
 
@@ -1059,9 +1059,9 @@ The planner MUST fall back deterministically when the LLM returns:
 
 ### 33.4 Provider Acceptance
 
-- Valid Gemini planner output MUST persist `planner_provider=gemini` and `used_fallback=false`.
+- Valid Groq planner output MUST persist `planner_provider=groq` and `used_fallback=false`.
 - Valid primary local output MUST persist `planner_provider=local` and `used_fallback=false`.
-- Valid local output after Gemini failure MUST record provider fallback.
+- Valid local output after Groq failure MUST record provider fallback.
 - Deterministic planner fallback MUST persist `planner_provider=deterministic` and `used_fallback=true`.
 
 ### 33.5 Draft Safety Acceptance
@@ -1108,9 +1108,10 @@ npm run build
 Required provider-related environment variables MAY include:
 
 ```env
-LLM_PROVIDER=gemini|local|auto
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+LLM_PROVIDER=groq|local|auto
+GROQ_API_KEY=
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
 LOCAL_LLM_ENABLED=false
 LOCAL_LLM_BASE_URL=http://localhost:1234/v1
 LOCAL_LLM_API_KEY=lm-studio

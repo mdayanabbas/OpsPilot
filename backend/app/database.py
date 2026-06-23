@@ -31,7 +31,7 @@ def ensure_database_schema():
             connection.execute(
                 text(
                     "ALTER TABLE tool_calls "
-                    "ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'gemini'"
+                    "ADD COLUMN provider VARCHAR(50) NOT NULL DEFAULT 'groq'"
                 )
             )
 
@@ -40,6 +40,15 @@ def ensure_database_schema():
             connection.execute(
                 text("UPDATE tool_calls SET attempt = 1 WHERE attempt < 1")
             )
+
+    # Normalize legacy primary-provider labels after the provider migration.
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE tool_calls SET provider = 'groq' "
+                "WHERE provider = ('gem' || 'ini')"
+            )
+        )
 
     if "incidents" in inspector.get_table_names():
         incident_columns = {
@@ -79,6 +88,12 @@ def ensure_database_schema():
                         "ADD COLUMN raw_reasoning TEXT NOT NULL DEFAULT ''"
                     )
                 )
+            connection.execute(
+                text(
+                    "UPDATE planner_decisions SET planner_provider = 'groq' "
+                    "WHERE planner_provider = ('gem' || 'ini')"
+                )
+            )
 
     if "benchmark_runs" in inspector.get_table_names():
         benchmark_columns = {

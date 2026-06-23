@@ -1,6 +1,6 @@
 import re
 
-from app.services.gemini_service import GeminiServiceError, generate_json
+from app.services.groq_service import GroqServiceError, generate_json
 
 
 ISSUE_CATEGORIES = {"billing", "auth", "ui", "performance", "other"}
@@ -297,7 +297,7 @@ def _normalize_issues(raw_result: dict, input_text: str) -> dict:
         empty = _empty_issues()
         empty["attempts"] = raw_result.get("attempts", 1)
         empty["fallback_used"] = raw_result.get("fallback_used", False)
-        empty["provider"] = raw_result.get("provider", "gemini")
+        empty["provider"] = raw_result.get("provider", "groq")
         return empty
 
     issues = []
@@ -310,7 +310,7 @@ def _normalize_issues(raw_result: dict, input_text: str) -> dict:
         "issues": issues,
         "attempts": raw_result.get("attempts", 1),
         "fallback_used": raw_result.get("fallback_used", False),
-        "provider": raw_result.get("provider", "gemini"),
+        "provider": raw_result.get("provider", "groq"),
     }
 
 
@@ -386,7 +386,7 @@ Input:
 
     try:
         result = generate_json(prompt, ISSUE_EXTRACTION_RESPONSE_SCHEMA)
-    except (GeminiServiceError, ValueError, TypeError):
+    except (GroqServiceError, ValueError, TypeError):
         empty = _empty_issues()
         empty["fallback_used"] = True
         empty["provider"] = "fallback"
