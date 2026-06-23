@@ -64,3 +64,16 @@ ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM") or EMAIL_USERNAME
 ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = _get_int("SMTP_PORT", 587)
+
+_DEFAULT_CORS_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+CORS_ORIGINS = tuple(
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        ",".join(_DEFAULT_CORS_ORIGINS),
+    ).split(",")
+    if origin.strip()
+)

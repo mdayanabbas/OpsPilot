@@ -221,6 +221,8 @@ DEMO_MODE=false
 DEMO_API_KEY=
 MAX_WORKFLOWS_PER_HOUR=20
 
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
 EMAIL_INGESTION_ENABLED=false
 EMAIL_IMAP_HOST=imap.gmail.com
 EMAIL_IMAP_PORT=993
@@ -448,6 +450,12 @@ NEXT_PUBLIC_DEMO_API_KEY=your-demo-key
 ```
 
 Next.js public environment variables are embedded at build time. Rebuild the frontend after changing them. Add the deployed frontend origin to the backend CORS allowlist before production traffic.
+
+Set the exact deployed frontend origin on the backend service (comma-separate multiple origins and omit trailing slashes):
+
+```env
+CORS_ORIGINS=https://your-frontend.example.com
+```
 
 ## API Reference
 
