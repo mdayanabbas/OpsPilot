@@ -46,12 +46,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 
 const NAV_ITEMS = [
   ["Overview", "/", "01"],
-  ["New workflow", "/workflows/new", "02"],
-  ["Runs", "/runs", "03"],
-  ["Approvals", "/approvals", "04"],
-  ["Benchmarks", "/benchmarks", "05"],
-  ["Monitoring", "/monitoring", "06"],
-  ["Incidents", "/incidents", "07"],
+  ["Executive", "/dashboard", "02"],
+  ["New workflow", "/workflows/new", "03"],
+  ["Runs", "/runs", "04"],
+  ["Approvals", "/approvals", "05"],
+  ["Benchmarks", "/benchmarks", "06"],
+  ["Monitoring", "/monitoring", "07"],
+  ["Incidents", "/incidents", "08"],
 ] as const;
 
 const EMPTY_MONITORING: MonitoringSummary = {

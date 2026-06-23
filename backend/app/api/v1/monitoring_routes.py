@@ -6,8 +6,14 @@ from app.database import get_db
 from app.models.evaluation import EvaluationResult
 from app.models.tool_call import ToolCall
 from app.models.workflow import WorkflowRun
+from app.services.executive_summary_service import get_executive_summary
 
 router = APIRouter()
+
+
+@router.get("/executive-summary")
+def executive_summary(db: Session = Depends(get_db)):
+    return get_executive_summary(db)
 
 
 def _safe_provider(tool_call: ToolCall) -> str:

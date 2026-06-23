@@ -8,21 +8,23 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 
 const NAV_ITEMS = [
   ["Overview", "/", "01"],
-  ["New workflow", "/workflows/new", "02"],
-  ["Runs", "/runs", "03"],
-  ["Approvals", "/approvals", "04"],
-  ["Benchmarks", "/benchmarks", "05"],
-  ["Monitoring", "/monitoring", "06"],
-  ["Incidents", "/incidents", "07"],
+  ["Executive", "/dashboard", "02"],
+  ["New workflow", "/workflows/new", "03"],
+  ["Runs", "/runs", "04"],
+  ["Approvals", "/approvals", "05"],
+  ["Benchmarks", "/benchmarks", "06"],
+  ["Monitoring", "/monitoring", "07"],
+  ["Incidents", "/incidents", "08"],
 ] as const;
 
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/" || pathname === "/dashboard";
+  if (href === "/") return pathname === "/";
   if (href === "/workflows/new") return pathname.startsWith("/workflows");
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 function routeName(pathname: string) {
+  if (pathname === "/dashboard") return "Executive control center";
   if (pathname.startsWith("/workflows")) return "Workflow launcher";
   if (pathname.startsWith("/runs/live")) return "Live execution";
   if (pathname.startsWith("/runs/")) return "Run intelligence";
@@ -40,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [apiConnected, setApiConnected] = useState(true);
 
   useEffect(() => {
-    if (pathname === "/" || pathname === "/dashboard") return;
+    if (pathname === "/") return;
 
     let active = true;
     fetch(`${API_BASE_URL}/api/v1/approvals/stats`, { cache: "no-store" })
@@ -68,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     [pathname],
   );
 
-  if (pathname === "/" || pathname === "/dashboard") return children;
+  if (pathname === "/") return children;
 
   return (
     <div className="opspilot-route-shell min-h-screen bg-[#07090d] text-slate-100 selection:bg-lime-200 selection:text-slate-950">
