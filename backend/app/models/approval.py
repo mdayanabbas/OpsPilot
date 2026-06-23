@@ -21,3 +21,9 @@ class ApprovalDecision(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     workflow_run = relationship("WorkflowRun", back_populates="approval_decisions")
+    comments = relationship(
+        "ApprovalComment",
+        back_populates="approval",
+        cascade="all, delete-orphan",
+        order_by="ApprovalComment.created_at",
+    )
