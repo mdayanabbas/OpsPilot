@@ -39,15 +39,6 @@ type ApprovalStats = {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-const NAV_ITEMS = [
-  ["Dashboard", "/"],
-  ["Runs", "/runs"],
-  ["Approvals", "/approvals"],
-  ["Benchmarks", "/benchmarks"],
-  ["Monitoring", "/monitoring"],
-  ["Incidents", "/incidents"],
-] as const;
-
 function formatDate(value: string | null) {
   if (!value) return "Awaiting review";
   return new Intl.DateTimeFormat("en", {
@@ -209,15 +200,6 @@ export default function ApprovalsPage() {
     <main className="min-h-screen bg-[#05070b] text-slate-100">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(34,211,238,0.09),transparent_32%),radial-gradient(circle_at_88%_16%,rgba(139,92,246,0.08),transparent_28%)]" />
       <div className="relative mx-auto max-w-7xl px-5 py-8 lg:px-8">
-        <nav className="mb-10 flex flex-wrap items-center justify-between gap-5">
-          <Link href="/" className="text-lg font-bold tracking-tight text-white">OpsPilot <span className="text-cyan-300">/</span> Control</Link>
-          <div className="flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.035] p-1.5">
-            {NAV_ITEMS.map(([name, href]) => (
-              <Link key={href} href={href} className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${href === "/approvals" ? "bg-cyan-300/12 text-cyan-200" : "text-slate-500 hover:text-white"}`}>{name}</Link>
-            ))}
-          </div>
-        </nav>
-
         <header className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-300">Human Approval Center</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-white sm:text-5xl">Decisions with context.</h1>

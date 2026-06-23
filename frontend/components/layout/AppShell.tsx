@@ -109,7 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#07090d]/90 px-4 py-3 backdrop-blur-xl sm:px-7">
           <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3"><span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-600">OP / {activeIndex}</span><span className="h-3 w-px bg-white/10" /><span className="truncate text-xs text-slate-400">{routeName(pathname)}</span></div>
-            <div className="flex items-center gap-2"><Link href="/approvals" className="hidden border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400 transition hover:border-amber-200/30 hover:text-amber-100 sm:block">Approvals{pendingApprovals ? ` · ${pendingApprovals}` : ""}</Link><Link href="/workflows/new" className="bg-lime-200 px-4 py-2 text-xs font-bold text-[#0a0c10] transition hover:bg-lime-100">Run workflow +</Link></div>
+            <div className="flex items-center gap-2"><Link href="/approvals" className="hidden border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400 transition hover:border-amber-200/30 hover:text-amber-100 sm:block">Approvals{pendingApprovals ? ` / ${pendingApprovals}` : ""}</Link><Link href="/workflows/new" className="bg-lime-200 px-4 py-2 text-xs font-bold text-[#0a0c10] transition hover:bg-lime-100">Run workflow +</Link></div>
           </div>
         </header>
 
@@ -117,6 +117,36 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="opspilot-route-content relative">{children}</div>
       </div>
+      <style jsx global>{`
+        .opspilot-route-shell .opspilot-route-content main > .fixed {
+          display: none !important;
+        }
+        .opspilot-route-shell .opspilot-route-content .rounded-3xl,
+        .opspilot-route-shell .opspilot-route-content .rounded-2xl,
+        .opspilot-route-shell .opspilot-route-content .rounded-xl {
+          border-radius: 2px !important;
+        }
+        .opspilot-route-shell .opspilot-route-content .shadow-2xl,
+        .opspilot-route-shell .opspilot-route-content .shadow-xl,
+        .opspilot-route-shell .opspilot-route-content .shadow-lg {
+          box-shadow: none !important;
+        }
+        .opspilot-route-shell .opspilot-route-content main header,
+        .opspilot-route-shell .opspilot-route-content main form {
+          background: #0a0d12 !important;
+          border-color: rgba(255, 255, 255, 0.085) !important;
+        }
+        .opspilot-route-shell .opspilot-route-content .bg-gradient-to-r {
+          background: #d9f99d !important;
+          color: #0a0c10 !important;
+        }
+        .opspilot-route-shell .opspilot-route-content textarea,
+        .opspilot-route-shell .opspilot-route-content input,
+        .opspilot-route-shell .opspilot-route-content select {
+          border-radius: 2px !important;
+          background-color: #07090d !important;
+        }
+      `}</style>
     </div>
   );
 }
