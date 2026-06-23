@@ -14,7 +14,7 @@ class ToolCall(Base):
 
     step_name = Column(String(100), nullable=False)
     tool_name = Column(String(100), nullable=False)
-    provider = Column(String(50), nullable=False, default="gemini")
+    provider = Column(String(50), nullable=False, default="groq")
 
     status = Column(String(50), nullable=False, default="pending")
     attempt = Column(Integer, nullable=False, default=1)

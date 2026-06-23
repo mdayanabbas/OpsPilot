@@ -279,7 +279,7 @@ function providerLabel(provider: string | null | undefined, fallbackUsed = false
     return "LM Studio";
   }
 
-  return "Gemini";
+  return "Groq";
 }
 
 function plannerReasoningSource(plannerDecision: PlannerDecision) {
@@ -297,7 +297,7 @@ function plannerReasoningSource(plannerDecision: PlannerDecision) {
 function logicalToolLabel(toolName: string) {
   return titleize(
     toolName
-      .replace(/^gemini_/, "")
+      .replace(/^groq_/, "")
       .replace(/_generator$/, "")
       .replace(/_extractor$/, "")
       .replace(/_router$/, "_router"),
@@ -312,7 +312,7 @@ function providerSummary(toolCalls: ToolCall[]) {
   });
 
   if (providers.size > 1) return "Mixed providers";
-  return providers.values().next().value ?? "Gemini";
+  return providers.values().next().value ?? "Groq";
 }
 
 function executionHealth(

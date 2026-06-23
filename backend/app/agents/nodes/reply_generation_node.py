@@ -1,6 +1,6 @@
 import json
 
-from app.services.gemini_service import generate_json
+from app.services.groq_service import generate_json
 from app.tools.retry_controller import retry_with_fallback
 
 
@@ -119,7 +119,7 @@ def _normalize_reply(raw_reply: dict, issue: dict) -> dict:
         "risk_level": risk_level,
         "risk_reason": risk_reason,
         "requires_approval": True,
-        "provider": raw_reply.get("provider", "gemini"),
+        "provider": raw_reply.get("provider", "groq"),
         "fallback_used": raw_reply.get("fallback_used", False),
     }
 
@@ -178,7 +178,7 @@ Issue:
     reply["fallback_used"] = reply.get("fallback_used", retry_result["fallback_used"])
     reply["provider"] = reply.get(
         "provider",
-        "fallback" if reply["fallback_used"] else "gemini",
+        "fallback" if reply["fallback_used"] else "groq",
     )
 
     return reply

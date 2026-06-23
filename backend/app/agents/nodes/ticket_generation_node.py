@@ -1,7 +1,7 @@
 import json
 
 from app.agents.nodes.issue_normalization_node import normalize_priority
-from app.services.gemini_service import GeminiServiceError, generate_json
+from app.services.groq_service import GroqServiceError, generate_json
 
 
 CATEGORY_TO_TEAM = {
@@ -132,7 +132,7 @@ def _normalize_ticket(raw_ticket: dict, issue: dict) -> dict:
         "acceptance_criteria": acceptance_criteria,
         "attempts": raw_ticket.get("attempts", 1),
         "fallback_used": raw_ticket.get("fallback_used", False),
-        "provider": raw_ticket.get("provider", "gemini"),
+        "provider": raw_ticket.get("provider", "groq"),
     }
 
 
@@ -174,7 +174,7 @@ Issue:
 
     try:
         ticket = generate_json(prompt, TICKET_RESPONSE_SCHEMA)
-    except (GeminiServiceError, ValueError, TypeError):
+    except (GroqServiceError, ValueError, TypeError):
         return fallback
 
     return _normalize_ticket(ticket, issue)

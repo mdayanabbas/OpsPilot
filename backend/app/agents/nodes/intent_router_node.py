@@ -1,4 +1,4 @@
-from app.services.gemini_service import generate_json
+from app.services.groq_service import generate_json
 from app.tools.retry_controller import retry_with_fallback
 
 
@@ -85,7 +85,7 @@ Input:
     retry_result = retry_with_fallback(
         operation=lambda: generate_json(prompt, INTENT_RESPONSE_SCHEMA),
         fallback=lambda: _fallback_intent(
-            "Gemini intent router unavailable. Falling back to safe clarification mode."
+            "Groq intent router unavailable. Falling back to safe clarification mode."
         ),
         max_retries=2,
     )
@@ -94,7 +94,7 @@ Input:
 
     if retry_result["fallback_used"]:
         intent = retry_result["result"] or _fallback_intent(
-            "Gemini intent router unavailable. Falling back to safe clarification mode."
+            "Groq intent router unavailable. Falling back to safe clarification mode."
         )
     else:
         intent = _normalize_intent(raw_intent)
@@ -106,7 +106,7 @@ Input:
     )
     intent["provider"] = raw_intent.get(
         "provider",
-        "fallback" if intent["fallback_used"] else "gemini",
+        "fallback" if intent["fallback_used"] else "groq",
     )
 
     return intent

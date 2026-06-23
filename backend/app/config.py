@@ -32,9 +32,10 @@ def _get_int(name: str, default: int) -> int:
         return default
 
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "local").strip().lower()
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq").strip().lower()
 
 LOCAL_LLM_ENABLED = _get_bool("LOCAL_LLM_ENABLED", False)
 LOCAL_LLM_BASE_URL = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:1234/v1")

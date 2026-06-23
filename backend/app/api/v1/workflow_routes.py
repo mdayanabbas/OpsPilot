@@ -52,13 +52,13 @@ LOW_INTENT_CONFIDENCE_THRESHOLD = 0.60
 
 
 def _configured_provider() -> str:
-    return LLM_PROVIDER if LLM_PROVIDER in {"gemini", "local"} else "gemini"
+    return LLM_PROVIDER if LLM_PROVIDER in {"groq", "local"} else "groq"
 
 
 def _result_provider(result: dict | None, default: str | None = None) -> str:
     if isinstance(result, dict):
         provider = result.get("provider")
-        if provider in {"gemini", "local", "fallback"}:
+        if provider in {"groq", "local", "fallback"}:
             return provider
 
         if result.get("fallback_used"):
