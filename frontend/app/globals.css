@@ -34,3 +34,60 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #3b4655;
 }
+
+/* Shared command-shell treatment for legacy feature pages. The selectors are
+   intentionally scoped so workflow behavior and component state stay intact. */
+.opspilot-route-content main {
+  min-height: calc(100vh - 56px);
+  background: transparent !important;
+}
+
+.opspilot-route-content main > .fixed,
+.opspilot-route-content main > div > aside,
+.opspilot-route-content main aside {
+  display: none !important;
+}
+
+.opspilot-route-content main [class~="lg:pl-72"] {
+  padding-left: 0 !important;
+}
+
+.opspilot-route-content main > div.relative > nav {
+  display: none !important;
+}
+
+.opspilot-route-content .rounded-3xl,
+.opspilot-route-content .rounded-2xl,
+.opspilot-route-content .rounded-xl {
+  border-radius: 2px !important;
+}
+
+.opspilot-route-content .shadow-2xl,
+.opspilot-route-content .shadow-xl,
+.opspilot-route-content .shadow-lg {
+  box-shadow: none !important;
+}
+
+.opspilot-route-content .backdrop-blur-xl,
+.opspilot-route-content .backdrop-blur-2xl {
+  backdrop-filter: none !important;
+}
+
+.opspilot-route-content header,
+.opspilot-route-content form,
+.opspilot-route-content section {
+  border-color: rgba(255, 255, 255, 0.085);
+}
+
+.opspilot-route-content h1,
+.opspilot-route-content h2,
+.opspilot-route-content h3 {
+  color: #f4f2eb;
+  letter-spacing: -0.025em;
+}
+
+.opspilot-route-content textarea,
+.opspilot-route-content input,
+.opspilot-route-content select {
+  border-radius: 2px !important;
+}
