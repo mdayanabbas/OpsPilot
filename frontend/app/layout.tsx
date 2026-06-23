@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import { AppShell } from "../components/layout/AppShell";
 
 export const metadata = {
   title: "OpsPilot",
@@ -9,7 +10,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-[#05070b] text-slate-100 antialiased">{children}</body>
+      <body className="bg-[#05070b] text-slate-100 antialiased"><AppShell>{children}</AppShell></body>
     </html>
   );
 }
