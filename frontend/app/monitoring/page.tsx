@@ -29,16 +29,6 @@ type MonitoringSummary = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const NAV_ITEMS = [
-  ["Dashboard", "/"],
-  ["Workflows", "/workflows/new"],
-  ["Runs", "/runs"],
-  ["Approvals", "/approvals"],
-  ["Benchmarks", "/benchmarks"],
-  ["Monitoring", "/monitoring"],
-  ["Incidents", "/incidents"],
-] as const;
-
 function percent(value: number | null | undefined) {
   if (value === null || value === undefined) return "n/a";
   return `${Math.round(value * 100)}%`;
@@ -129,39 +119,7 @@ export default function MonitoringPage() {
       <div className="fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/40 to-transparent" />
 
       <div className="relative flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-white/10 bg-black/20 px-4 py-5 backdrop-blur-2xl lg:fixed lg:inset-y-0 lg:flex lg:flex-col">
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.045] p-3 shadow-lg shadow-black/20">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-300 to-violet-400 text-sm font-black text-slate-950">
-              OP
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-white">OpsPilot</p>
-              <p className="text-xs text-slate-500">Agent operations</p>
-            </div>
-          </div>
-
-          <nav className="mt-8 space-y-1">
-            {NAV_ITEMS.map(([item, href]) => {
-              const active = item === "Monitoring";
-              return (
-                <Link
-                  key={item}
-                  className={`flex items-center justify-between rounded-2xl px-3 py-2.5 text-sm font-medium transition ${
-                    active
-                      ? "border border-sky-300/20 bg-sky-300/10 text-sky-100 shadow-lg shadow-sky-950/20"
-                      : "text-slate-400 hover:bg-white/[0.045] hover:text-white"
-                  }`}
-                  href={href}
-                >
-                  <span>{item}</span>
-                  {active ? <span className="h-1.5 w-1.5 rounded-full bg-sky-300" /> : null}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
-
-        <section className="flex w-full flex-col lg:pl-72">
+        <section className="flex w-full flex-col">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
             <header className="rounded-3xl border border-white/10 bg-slate-950/70 p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Monitoring Layer</p>
