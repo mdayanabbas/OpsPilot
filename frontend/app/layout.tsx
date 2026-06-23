@@ -5,6 +5,10 @@ import { AppShell } from "../components/layout/AppShell";
 export const metadata = {
   title: "OpsPilot",
   description: "Measured agentic AI for customer feedback triage",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
