@@ -10,6 +10,11 @@ PROJECT_ROOT = BACKEND_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
 load_dotenv(BACKEND_DIR / ".env", override=True)
 
+DATABASE_URL = (
+    os.getenv("DATABASE_URL", "sqlite:///./opspilot.db").strip()
+    or "sqlite:///./opspilot.db"
+)
+
 
 def _get_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -30,6 +35,11 @@ def _get_int(name: str, default: int) -> int:
         return int(value)
     except ValueError:
         return default
+
+
+DEMO_MODE = _get_bool("DEMO_MODE", False)
+DEMO_API_KEY = os.getenv("DEMO_API_KEY", "").strip()
+MAX_WORKFLOWS_PER_HOUR = max(1, _get_int("MAX_WORKFLOWS_PER_HOUR", 20))
 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")

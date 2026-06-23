@@ -1,12 +1,13 @@
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = "sqlite:///./opspilot.db"
+from app.config import DATABASE_URL
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+engine_options = {}
+if DATABASE_URL.startswith("sqlite"):
+    engine_options["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, **engine_options)
 
 SessionLocal = sessionmaker(
     autocommit=False,
@@ -18,6 +19,11 @@ Base = declarative_base()
 
 
 def ensure_database_schema():
+    # Existing auto-schema guards are SQLite-specific. Production PostgreSQL
+    # schema evolution should use formal migrations.
+    if engine.dialect.name != "sqlite":
+        return
+
     inspector = inspect(engine)
     if "tool_calls" not in inspector.get_table_names():
         return

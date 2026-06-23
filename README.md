@@ -357,9 +357,9 @@ Other planned tools are skipped by dynamic execution v1. The main workflow still
 - Python
 - FastAPI
 - SQLAlchemy
-- SQLite
+- SQLite locally / PostgreSQL in production
 - Pydantic
-- Google Gen AI SDK
+- Groq through the OpenAI-compatible client
 - OpenAI-compatible local LLM client
 - ChromaDB and sentence-transformer dependencies for memory-related capabilities
 - Pytest and `unittest`-compatible regression tests
@@ -441,7 +441,7 @@ pip install -r requirements.txt
 
 ### 4. Start the Backend
 
-Run from `backend/` so the SQLite database is created at `backend/opspilot.db`:
+Run from `backend/` so the default local SQLite database is created at `backend/opspilot.db`:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -453,7 +453,7 @@ Useful backend URLs:
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
-SQLAlchemy creates missing tables at startup. `ensure_database_schema()` applies the small additive SQLite migrations currently required by the project.
+SQLAlchemy creates missing tables at startup. `ensure_database_schema()` applies the small additive migrations required by existing local SQLite databases.
 
 ### 5. Install Frontend Dependencies
 
@@ -619,7 +619,7 @@ The Planner Decision section displays:
 
 ## Persistence
 
-OpsPilot uses SQLite through SQLAlchemy. The main persisted entities include:
+OpsPilot uses SQLAlchemy with SQLite locally and PostgreSQL in production. The main persisted entities include:
 
 - workflow runs;
 - agent steps;
@@ -637,13 +637,21 @@ OpsPilot uses SQLite through SQLAlchemy. The main persisted entities include:
 - benchmark runs;
 - agent execution traces.
 
-The database URL is currently fixed as:
+The database is configured with `DATABASE_URL`. Local development defaults to SQLite:
 
 ```text
 sqlite:///./opspilot.db
 ```
 
 Because this path is relative, start the backend from the `backend` directory for consistent database placement.
+
+For production, use PostgreSQL from Neon, Supabase, or another managed Postgres provider:
+
+```env
+DATABASE_URL=postgresql+psycopg2://user:password@host/dbname
+```
+
+SQLite retains its local thread configuration. PostgreSQL uses the standard SQLAlchemy engine configuration with `psycopg2-binary`. Existing SQLite auto-schema guards are intentionally local-only; production schema changes should use formal migrations.
 
 ## Testing
 
@@ -779,7 +787,7 @@ Not currently implemented as production integrations:
 Potential next steps:
 
 - semantic memory retrieval and stronger relevance scoring;
-- production PostgreSQL and formal migration tooling;
+- formal PostgreSQL migration tooling, backups, and restore operations;
 - authenticated reviewer accounts and audit trails;
 - real Jira/helpdesk integrations behind approval gates;
 - richer incident clustering and escalation policies;

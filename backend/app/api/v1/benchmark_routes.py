@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.demo_guard import require_demo_api_key
 from app.models.benchmark import BenchmarkRun
 from app.models.benchmark_result import BenchmarkResult
 from app.schemas.benchmark_schema import BenchmarkRunHistoryResponse
@@ -30,7 +31,7 @@ def list_regression_cases():
     return load_regression_cases()
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[Depends(require_demo_api_key)])
 def run_benchmark_suite(db: Session = Depends(get_db)):
     return run_benchmarks(db)
 
@@ -44,7 +45,7 @@ def list_benchmark_history(db: Session = Depends(get_db)):
     )
 
 
-@router.post("/run-regression")
+@router.post("/run-regression", dependencies=[Depends(require_demo_api_key)])
 def run_benchmark_regression(db: Session = Depends(get_db)):
     return run_regression_suite(db)
 

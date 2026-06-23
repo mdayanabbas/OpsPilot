@@ -15,6 +15,10 @@ from app.agents.nodes.ticket_generation_node import generate_ticket
 from app.agents.executor import execute_planned_tools
 from app.config import LLM_PROVIDER
 from app.database import SessionLocal, get_db
+from app.services.demo_guard import (
+    require_demo_api_key,
+    require_workflow_creation_allowed,
+)
 from app.models.agent_step import AgentStep
 from app.models.agent_execution_trace import AgentExecutionTrace
 from app.models.critic_result import CriticResult
@@ -278,7 +282,11 @@ def list_workflow_runs(db: Session = Depends(get_db)):
     return results
 
 
-@router.post("/run", response_model=WorkflowRunResponse)
+@router.post(
+    "/run",
+    response_model=WorkflowRunResponse,
+    dependencies=[Depends(require_workflow_creation_allowed)],
+)
 def create_workflow_run(
     payload: WorkflowRunCreate,
     background_tasks: BackgroundTasks,
@@ -939,6 +947,7 @@ def get_workflow_replay(replay_id: int, db: Session = Depends(get_db)):
 @router.post(
     "/{workflow_run_id}/replay",
     response_model=WorkflowReplayResponse,
+    dependencies=[Depends(require_demo_api_key)],
 )
 def replay_existing_workflow(workflow_run_id: int, db: Session = Depends(get_db)):
     try:

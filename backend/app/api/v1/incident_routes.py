@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.demo_guard import require_demo_api_key
 from app.models.incident import Incident
 from app.models.incident_response_plan import IncidentResponsePlan
 from app.models.incident_execution_trace import IncidentExecutionTrace
@@ -141,7 +142,10 @@ def get_incident_executions(incident_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/{incident_id}/execute")
+@router.post(
+    "/{incident_id}/execute",
+    dependencies=[Depends(require_demo_api_key)],
+)
 def execute_incident_plan(incident_id: int, db: Session = Depends(get_db)):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
