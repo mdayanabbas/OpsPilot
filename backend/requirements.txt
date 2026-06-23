@@ -67,6 +67,7 @@ ormsgpack==1.12.2
 overrides==7.7.0
 packaging==26.2
 pluggy==1.6.0
+psycopg2-binary==2.9.11
 protobuf==6.33.6
 pyasn1==0.6.3
 pyasn1_modules==0.4.2

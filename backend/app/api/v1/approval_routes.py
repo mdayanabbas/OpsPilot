@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.demo_guard import require_demo_api_key
 from app.models.approval import ApprovalDecision
 from app.models.approval_comment import ApprovalComment
 from app.models.reply import CustomerReply
@@ -188,7 +189,7 @@ def create_approval_decision(
     }
 
 
-@router.post("/approve")
+@router.post("/approve", dependencies=[Depends(require_demo_api_key)])
 def approve_item(
     payload: ApprovalDecisionRequest,
     db: Session = Depends(get_db),
@@ -196,7 +197,7 @@ def approve_item(
     return create_approval_decision(payload, "approved", db)
 
 
-@router.post("/reject")
+@router.post("/reject", dependencies=[Depends(require_demo_api_key)])
 def reject_item(
     payload: ApprovalDecisionRequest,
     db: Session = Depends(get_db),

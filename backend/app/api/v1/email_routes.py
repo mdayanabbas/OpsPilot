@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.demo_guard import require_demo_api_key
 from app.services.email_ingestion_service import (
     EmailImapLoginError,
     EmailIngestionConfigError,
@@ -41,7 +42,7 @@ def preview_unread_emails(limit: int = 10):
         _raise_email_error(exc)
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[Depends(require_demo_api_key)])
 def run_email_ingestion(
     payload: EmailIngestionRequest,
     db: Session = Depends(get_db),
