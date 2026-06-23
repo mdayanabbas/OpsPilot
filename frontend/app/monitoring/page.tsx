@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   ["Dashboard", "/"],
   ["Workflows", "/workflows/new"],
   ["Runs", "/runs"],
+  ["Approvals", "/approvals"],
   ["Benchmarks", "/benchmarks"],
   ["Monitoring", "/monitoring"],
   ["Incidents", "/incidents"],

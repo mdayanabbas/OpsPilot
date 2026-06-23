@@ -4,5 +4,33 @@ body {
   margin: 0;
   background: #070a12;
   color: #f8fafc;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Segoe UI Variable", "Aptos", "Segoe UI", sans-serif;
+  font-feature-settings: "ss01" 1, "cv02" 1, "cv03" 1;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07090d;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid #07090d;
+  background: #29303b;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4655;
 }
