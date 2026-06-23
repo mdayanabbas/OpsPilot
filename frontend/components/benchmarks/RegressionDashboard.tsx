@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { withDemoApiKey } from "../../lib/api";
 
 
 type RegressionRun = {
@@ -78,7 +79,10 @@ export function RegressionDashboard() {
     setIsRunning(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/benchmarks/run-regression`, { method: "POST" });
+      const response = await fetch(`${API_BASE_URL}/api/v1/benchmarks/run-regression`, {
+        method: "POST",
+        headers: withDemoApiKey(),
+      });
       if (!response.ok) throw new Error(`Regression run failed: ${response.status}`);
       const run = (await response.json()) as RegressionRun;
       setLatest(run);

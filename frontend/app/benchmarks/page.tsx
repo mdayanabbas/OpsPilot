@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { RegressionDashboard } from "../../components/benchmarks/RegressionDashboard";
+import { withDemoApiKey } from "../../lib/api";
 
 type BenchmarkCase = {
   id: string;
@@ -163,6 +164,7 @@ export default function BenchmarksPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/benchmarks/run`, {
         method: "POST",
+        headers: withDemoApiKey(),
       });
 
       if (!response.ok) {

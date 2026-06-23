@@ -2,8 +2,9 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL, withDemoApiKey } from "../../../lib/api";
 
-const API_URL = "http://localhost:8000/api/v1/workflows/run";
+const API_URL = `${API_BASE_URL}/api/v1/workflows/run`;
 const SAMPLE_PROMPT =
   "Acme Corp says invoice still shows unpaid after successful payment. Support suspects billing sync failure.";
 type WorkflowRunResponse = {
@@ -31,9 +32,9 @@ export default function NewWorkflowPage() {
     try {
       const response = await fetch(API_URL, {
         method: "POST",
-        headers: {
+        headers: withDemoApiKey({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({ input_text: trimmedInput }),
       });
 
@@ -121,9 +122,6 @@ export default function NewWorkflowPage() {
               ) : null}
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-5 text-slate-500">
-                  The backend should be running at <span className="font-medium text-slate-400">localhost:8000</span>.
-                </p>
 
                 <button
                   type="submit"

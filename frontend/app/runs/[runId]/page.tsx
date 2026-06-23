@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { notFound } from "next/navigation";
 import { ApprovalActions } from "../../../components/approvals/ApprovalActions";
 import { WorkflowReplayPanel } from "../../../components/replays/WorkflowReplayPanel";
 import { AgentTraceFlow } from "../../../components/workflows/AgentTraceFlow";
@@ -400,8 +401,12 @@ export default async function WorkflowRunDetailsPage({
 }) {
   const { runId } = await params;
 
-  const [workflow, outputs, toolCalls, memoryItems, criticResult, plannerDecision, agentExecutions, replayHistory] = await Promise.all([
-    fetchJson<WorkflowRun>(`/api/v1/workflows/${runId}`),
+  const workflow = await fetchOptionalJson<WorkflowRun>(`/api/v1/workflows/${runId}`);
+  if (!workflow) {
+    notFound();
+  }
+
+  const [outputs, toolCalls, memoryItems, criticResult, plannerDecision, agentExecutions, replayHistory] = await Promise.all([
     fetchJson<WorkflowOutputs>(`/api/v1/workflows/${runId}/outputs`),
     fetchJson<ToolCall[]>(`/api/v1/workflows/${runId}/tool-calls`),
     fetchJson<MemoryItem[]>(`/api/v1/workflows/${runId}/memory`),
