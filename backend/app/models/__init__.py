@@ -6,6 +6,7 @@ from app.models.reply import CustomerReply
 from app.models.summary import FounderSummary
 from app.models.evaluation import EvaluationResult
 from app.models.approval import ApprovalDecision
+from app.models.approval_comment import ApprovalComment
 from app.models.memory import MemoryItem
 from app.models.benchmark import BenchmarkCaseResult, BenchmarkRun
 from app.models.benchmark_expectation import BenchmarkExpectation
@@ -30,6 +31,7 @@ __all__ = [
     "FounderSummary",
     "EvaluationResult",
     "ApprovalDecision",
+    "ApprovalComment",
     "MemoryItem",
     "BenchmarkRun",
     "BenchmarkCaseResult",
