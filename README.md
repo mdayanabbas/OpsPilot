@@ -1,95 +1,74 @@
 # OpsPilot
 
-OpsPilot is a measured agentic AI system for customer-feedback triage. It turns unstructured customer reports into normalized issues, engineering tickets, customer-reply drafts, evaluation results, founder summaries, incident signals, and human-review decisions.
+OpsPilot is an operations control system for turning customer feedback into structured, reviewable work. It routes intent, normalizes issues, plans tool usage, generates ticket and reply drafts, evaluates quality, detects operational incidents, and preserves a trace of every decision.
 
-The project combines LLM-assisted reasoning with deterministic normalization, validation, allowlists, fallbacks, evaluation, and approval gates. Groq and a local LM Studio-compatible endpoint are supported through one provider abstraction.
+The project combines LLM-assisted reasoning with deterministic policies. Groq is the primary hosted provider, LM Studio is the optional local fallback, and safety-sensitive decisions remain governed by explicit normalization, priority, critic, approval, and tool-allowlist rules.
 
-## Architecture Diagram
+## What Is Implemented
 
-<img width="2060" height="4684" alt="woha&#39;" src="https://github.com/user-attachments/assets/df61a1a9-1e41-4097-95ff-7e5444fc09fc" />
+- Customer-feedback workflow execution
+- Deterministic issue normalization and taxonomy
+- Groq-first planning with optional LM Studio fallback
+- Central tool registry and dynamic tool execution
+- Durable agent steps, tool calls, and execution traces
+- Ticket and customer-reply generation with duplicate prevention
+- Priority policy, output evaluation, and critic review
+- Human approval queue, decisions, comments, filters, and timeline
+- Workflow replay with persisted output diffs
+- React Flow agent trace graph
+- Incident detection, response planning, and read-only execution
+- Deterministic benchmark regression engine and historical results
+- Executive and operational monitoring dashboards
+- Optional IMAP email ingestion and incident email alerts
+- Demo API-key protection and workflow rate limiting
+- SQLite local development and PostgreSQL/Neon production configuration
+- Backend Docker deployment support
 
+## System Architecture
 
-
-## What OpsPilot Does
-
-OpsPilot currently supports one primary workflow: `customer_feedback_triage`.
-
-Given input such as:
-
-> A customer made the payment successfully but the subscription is not yet active.
-
-OpsPilot can:
-
-1. Detect the workflow intent.
-2. Extract one or more customer issues.
-3. Normalize and validate the issue against a deterministic taxonomy.
-4. Search memory for similar historical issues.
-5. Ask the hybrid planner to select a safe plan.
-6. Validate the LLM plan against deterministic plan and tool allowlists.
-7. Fall back to deterministic planning if the provider, JSON parsing, or validation fails.
-8. Generate a draft engineering ticket and customer reply.
-9. Evaluate output quality and policy compliance.
-10. Run a deterministic critic over the generated artifacts.
-11. Generate a founder-facing summary, risks, and recommended actions.
-12. Require human approval for sensitive workflows.
-13. Persist workflow state, planner metadata, tool calls, memory, evaluations, and incidents.
-
-## Core Principles
-
-- **LLM-assisted, deterministically controlled:** LLMs may propose structured decisions, but deterministic code validates categories, plans, tools, and approval requirements.
-- **Safe fallback:** Invalid JSON, unavailable providers, unknown tools, unsafe plans, and policy violations fall back to deterministic behavior.
-- **No autonomous side effects:** Dynamic execution is restricted to a small internal allowlist. Ticket and reply outputs are drafts; external Jira, Slack, and automatic customer sending are not enabled.
-- **Human approval for sensitive work:** Billing, authentication, refunds, and security-related issues are routed through human review.
-- **Observable execution:** Provider, retries, fallback usage, tool calls, evaluation scores, failures, and planner reasoning metadata are recorded.
-- **Reusable issue understanding:** Issue extraction is followed by a deterministic normalization and validation layer rather than relying on one-off phrase patches.
-
-## End-to-End Workflow
-
-### 1. Intent Routing
-
-The intent router classifies input into the supported `customer_feedback_triage` workflow and returns confidence, reasoning, and whether clarification appears necessary.
-
-Low-confidence or invalid intent output uses a safe clarification fallback.
-
-### 2. Issue Extraction
-
-The issue extraction node asks the configured LLM provider for structured issues. Each issue contains:
-
-```json
-{
-  "title": "string",
-  "category": "string",
-  "severity": "low | medium | high",
-  "customer": "string | null",
-  "description": "string"
-}
+```text
+Customer input
+    |
+    v
+Intent Router
+    |
+    v
+Issue Extraction
+    |
+    v
+Issue Normalization
+    |
+    v
+Memory Search
+    |
+    v
+Planner
+    |
+    v
+Dynamic Tool Executor
+    |-- Ticket Generation
+    |-- Customer Reply
+    |-- Evaluation
+    |-- Founder Summary
+    |-- Incident Detection
+    v
+Critic Review
+    |
+    v
+Human Approval / Operational Monitoring
 ```
 
-Extraction uses structured JSON, retry/fallback metadata, category rules, and deterministic cleanup.
+Every workflow persists its major decisions and outputs so the run can be inspected, replayed, compared, benchmarked, and represented as a trace graph.
 
-### 3. Issue Normalization and Validation
+## Workflow Pipeline
 
-`issue_normalization_node.py` runs immediately after extraction through:
+### Intent routing
 
-```python
-normalize_issue_result(input_text: str, extracted_result: dict) -> dict
-```
+The router classifies incoming text and decides whether it belongs to the customer-feedback workflow. Provider errors are recorded and can fall back to safe deterministic behavior.
 
-It returns:
+### Issue extraction and normalization
 
-```json
-{
-  "issues": [],
-  "requires_clarification": false,
-  "normalization_applied": true,
-  "normalization_reason": "created normalized issue from actionable input",
-  "confidence": 0.9
-}
-```
-
-Provider, retry, and fallback metadata from extraction are preserved for compatibility and monitoring.
-
-Supported normalized categories:
+Extraction creates structured issue candidates. The normalization node then applies a deterministic taxonomy:
 
 - `billing`
 - `auth`
@@ -101,58 +80,19 @@ Supported normalized categories:
 - `security`
 - `other`
 
-The deterministic taxonomy classifies issues by the failing system and customer impact. Examples include:
+Normalization can create an actionable issue even when extraction missed one. It can also override an unnecessary clarification decision. Praise-only, success-only, non-actionable, or uncategorizable messages remain clarification cases.
 
-| Category | Example signals |
-| --- | --- |
-| Billing | successful payment with inactive subscription, unpaid invoice after payment, duplicate charge, pending refund, checkout failure |
-| Auth | login failure, broken password reset, immediately expired session, invalid credentials, locked account |
-| Performance | slow pages, timeout, freezing, long load time, hanging export, crash |
-| UI | broken button, overlapping dropdown, modal not opening, layout issue |
-| Data | missing records, wrong report values, stale dashboard data |
-| Integration | webhook failure, CRM synchronization failure, third-party API failure |
-| Notification | email not sent, OTP not received, delayed notification |
-| Security | suspicious login, unauthorized access, permission issue, data exposure |
+Priority normalization raises sensitive billing, authentication, security, and severe performance issues according to deterministic rules before ticket persistence.
 
-The normalizer can synthesize an issue from raw input when LLM extraction returns no issues but the text contains a concrete failure. It also overrides an extraction-level clarification decision when an actionable issue is present.
+### Planning
 
-Clarification is reserved for inputs where no useful action can safely be inferred, including:
+The planner selects a plan type and `next_tools`. Groq is the primary provider. LM Studio can be enabled as a local fallback, followed by a deterministic planner when provider execution or validation fails.
 
-- no concrete failure;
-- no customer impact;
-- praise, greeting, or success-only feedback;
-- an unknown category combined with a vague description.
+Planner output is validated against known tools and safety requirements. Billing, authentication, security, refund, payment, and subscription cases preserve human-review requirements.
 
-Relevant logs:
+### Dynamic tool execution
 
-```text
-[issue_normalizer] normalization_applied=true reason=...
-[issue_normalizer] clarification_overridden=true
-```
-
-### 4. Memory Search
-
-Before planning, OpsPilot searches persisted workflow memory for related issues using category and issue text. Matches can:
-
-- inform prioritization;
-- increase ticket priority;
-- appear as source evidence;
-- inform founder summaries and critic decisions.
-
-Completed workflows save ticket, reply, and evaluation context back into memory.
-
-### 5. Hybrid LLM Planner
-
-The planner combines LLM reasoning with deterministic safety validation.
-
-Allowed plan types:
-
-- `standard_triage`
-- `clarification`
-- `human_review`
-- `incident_response`
-
-Allowed planner tools:
+Planner-selected tools execute through the centralized registry. Dynamic executor v2 currently allows:
 
 - `search_memory`
 - `generate_ticket`
@@ -161,208 +101,48 @@ Allowed planner tools:
 - `generate_founder_summary`
 - `detect_incident`
 
-The planner prompt considers:
+Every selected tool receives an `executed`, `skipped`, or `error` trace. Existing workflow generation remains available as fallback, and ticket/reply duplicate prevention ensures each output is persisted once.
 
-- issue category;
-- memory matches;
-- evaluation output;
-- incident signals;
-- customer impact;
-- workflow confidence;
-- upstream provider fallback risk.
+### Evaluation and critic
 
-Expected LLM response:
+Evaluation measures output quality and review requirements. The deterministic critic warns on sensitive billing, authentication, and security cases, or when provider/fallback failures increase operational risk. Straightforward performance cases can pass unless execution quality requires review.
 
-```json
-{
-  "plan_type": "human_review",
-  "next_tools": [
-    "generate_ticket",
-    "generate_customer_reply",
-    "evaluate_workflow_output",
-    "generate_founder_summary"
-  ],
-  "reasoning": "The billing failure is actionable and requires approval.",
-  "requires_human_approval": true
-}
-```
+### Approval center
 
-The JSON parser tolerates:
+Tickets and replies that require human review appear in a centralized approval workspace. Reviewers can approve, reject, and comment without changing the underlying agent workflow contract.
 
-- markdown code fences;
-- text before or after JSON;
-- stringified JSON;
-- multiple objects by selecting the first valid JSON object.
+### Incident response
 
-String tool names are repaired into the internal planner-tool shape:
+Incident detection groups operational issue spikes. Each incident can receive a read-only response plan:
 
-```json
-{
-  "tool_name": "generate_ticket",
-  "reason": "Selected by planner",
-  "priority": "medium"
-}
-```
+- `billing_incident`
+- `auth_incident`
+- `performance_incident`
+- `general_incident`
 
-### 6. Deterministic Planner Validation
+Incident execution v1 allows only `search_memory` and `generate_founder_summary`. It does not send email automatically and does not change incident status.
 
-The validator rejects:
+### Workflow replay
 
-- unknown plan types;
-- unknown tools;
-- malformed tool entries;
-- clarification plans that include tools;
-- clarification for actionable issues;
-- plans that ignore confirmed incident signals;
-- plans that bypass mandatory human approval;
-- missing or invalid reasoning and approval fields.
+Replay is observational rather than deterministic. It reruns the original input against the current prompts, providers, memory, and policies, then compares workflow status, type, confidence, ticket fields, reply risk, evaluation score, critic status, and planner plan type.
 
-Actionable billing, authentication, and performance indicators prevent accidental clarification routing. Billing and authentication indicators also trigger human approval even if upstream categorization is weak.
+### Benchmark regression
 
-On any provider, parsing, or validation failure, OpsPilot uses its deterministic planner. Planner logs include:
-
-```text
-[planner] selected provider=...
-[planner] raw LLM planner response=...
-[planner] JSON parse error=...
-[planner] llm plan generated
-[planner] validation passed
-[planner] validation failure reason=...
-[planner] fallback reason=...
-[planner] fallback to deterministic planner: ...
-[planner] clarification rejected due to actionable indicators
-```
-
-Planner decisions persist:
-
-- `planner_provider`
-- `used_fallback`
-- `raw_reasoning`
-- `plan_type`
-- `next_tools`
-- `requires_human_approval`
-- `reasoning_summary`
-
-### 7. Ticket and Reply Generation
-
-For actionable workflows, OpsPilot creates:
-
-- an engineering ticket draft with title, priority, team, category, description, acceptance criteria, source evidence, approval requirement, and status;
-- a customer-reply draft with customer, issue, response, risk level, risk reason, approval requirement, and status.
-
-These are internal drafts. OpsPilot does not create real Jira tickets or automatically send customer replies.
-
-### 8. Evaluation and Critic
-
-The evaluation layer records:
-
-- quality score;
-- reply policy compliance;
-- ticket completeness;
-- unsupported claim rate;
-- tool recovery success;
-- human-review requirement;
-- detected risks.
-
-The deterministic critic then inspects issue, ticket, reply, evaluation, planner decision, memory, tool calls, and fallback state. It records status, risk flags, quality notes, recommended action, and manual-review requirement.
-
-### 9. Founder Summary
-
-OpsPilot produces a founder-facing summary that includes the issue, customer impact, ticket and reply outcome, evaluation signals, provider recovery, memory context, risks, and recommended actions.
-
-### 10. Incident Detection
-
-Completed workflows are checked for repeated incident patterns. Active incidents expose:
-
-- category and severity;
-- affected workflow count and related workflow IDs;
-- root-cause clusters;
-- operational risks;
-- recommended actions;
-- first and last detection timestamps.
-
-Email alerts are optional and disabled by default.
-
-### 11. Human Approval
-
-Tickets and replies can be approved or rejected through the approval API. The decision and reviewer note are persisted, and the selected draft status is updated.
-
-## Provider Strategy
-
-### Groq
-
-Groq uses its OpenAI-compatible API with structured JSON response constraints.
-
-```env
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_api_key
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_MODEL=llama-3.3-70b-versatile
-```
-
-### Local LM Studio
-
-The local provider uses an OpenAI-compatible endpoint.
-
-```env
-LLM_PROVIDER=local
-LOCAL_LLM_ENABLED=true
-LOCAL_LLM_BASE_URL=http://localhost:1234/v1
-LOCAL_LLM_API_KEY=lm-studio
-LOCAL_LLM_MODEL=your-loaded-model-id
-```
-
-### Automatic Provider Fallback
-
-Use `auto` to try Groq first and then LM Studio:
-
-```env
-LLM_PROVIDER=auto
-GROQ_API_KEY=your_api_key
-LOCAL_LLM_ENABLED=true
-LOCAL_LLM_BASE_URL=http://localhost:1234/v1
-LOCAL_LLM_API_KEY=lm-studio
-LOCAL_LLM_MODEL=your-loaded-model-id
-```
-
-If both providers fail, nodes use their deterministic safe fallback where available.
-
-## Safety Model
-
-OpsPilot currently uses several complementary controls:
-
-1. Structured response schemas for LLM nodes.
-2. Tolerant but bounded JSON extraction.
-3. Deterministic issue normalization and taxonomy classification.
-4. Plan-type and tool allowlists.
-5. Mandatory human approval for sensitive categories.
-6. Clarification rejection for known actionable failures.
-7. A restricted dynamic executor allowlist.
-8. Output evaluation and deterministic criticism.
-9. Draft-only ticket and reply persistence.
-10. Provider, fallback, retry, and error observability.
-
-The dynamic executor currently permits only:
-
-- `search_memory`
-- `evaluate_workflow_output`
-- `generate_founder_summary`
-
-Other planned tools are skipped by dynamic execution v1. The main workflow still invokes its established internal generation stages directly.
+The regression engine executes reusable benchmark cases and deterministically compares actual workflow outputs with expectations for category, plan type, priority, approval, workflow status, and critic status. Historical runs preserve average score and per-policy accuracy.
 
 ## Technology Stack
 
 ### Backend
 
-- Python
+- Python 3.12
 - FastAPI
 - SQLAlchemy
-- SQLite locally / PostgreSQL in production
-- Pydantic
-- Groq through the OpenAI-compatible client
-- OpenAI-compatible local LLM client
-- ChromaDB and sentence-transformer dependencies for memory-related capabilities
-- Pytest and `unittest`-compatible regression tests
+- SQLite for local development
+- PostgreSQL/Neon for production
+- Psycopg 2 (`psycopg2-binary`)
+- Groq through an OpenAI-compatible client
+- LM Studio as an optional local OpenAI-compatible provider
+- ChromaDB-backed memory components
 
 ### Frontend
 
@@ -370,6 +150,7 @@ Other planned tools are skipped by dynamic execution v1. The main workflow still
 - React 19
 - TypeScript
 - Tailwind CSS 4
+- React Flow
 
 ## Repository Structure
 
@@ -377,61 +158,43 @@ Other planned tools are skipped by dynamic execution v1. The main workflow still
 OpsPilot/
 |-- backend/
 |   |-- app/
-|   |   |-- agents/
-|   |   |   |-- nodes/          # intent, extraction, normalization, planner, generators, evaluation, critic
-|   |   |   |-- tools/          # tool registry
-|   |   |   `-- executor.py     # restricted dynamic tool execution
-|   |   |-- api/v1/             # workflow, approval, benchmark, monitoring, email, incident routes
-|   |   |-- models/             # SQLAlchemy persistence models
-|   |   |-- schemas/            # Pydantic API schemas
-|   |   |-- services/           # providers, memory, incidents, email, benchmarks
-|   |   |-- config.py
-|   |   |-- database.py
-|   |   `-- main.py
-|   |-- tests/                   # planner and normalization regression tests
-|   |-- debug_llm_planner.py     # direct planner debug entrypoint
+|   |   |-- agents/              # nodes, planner, executor, tools
+|   |   |-- api/v1/              # FastAPI route modules
+|   |   |-- models/              # SQLAlchemy persistence models
+|   |   |-- schemas/             # API schemas
+|   |   `-- services/            # replay, incidents, approvals, benchmarks
+|   |-- tests/                    # deterministic regression tests
+|   |-- Dockerfile
+|   |-- .dockerignore
+|   |-- .env.example
 |   `-- requirements.txt
 |-- frontend/
-|   |-- app/                     # Next.js routes
-|   |-- components/              # workflow, output, approval, benchmark UI
+|   |-- app/                      # App Router pages
+|   |-- components/               # dashboards, trace graph, approvals
+|   |-- lib/                      # shared frontend API configuration
+|   |-- .env.example
 |   `-- package.json
-|-- benchmarks/                  # benchmark cases/data
-|-- docs/                        # demo and supporting documentation
+|-- benchmarks/                   # benchmark and regression datasets
+|-- docs/
 |-- .env.example
 `-- README.md
 ```
 
-## Local Setup
+## Local Development
 
 ### Prerequisites
 
-- Python 3.11 or newer recommended
-- Node.js 20 or newer recommended
+- Python 3.11 or newer
+- Node.js 20 or newer
 - npm
-- One of:
-  - a Groq API key; or
-  - LM Studio running an OpenAI-compatible local server
+- A Groq API key, LM Studio, or both
 
-### 1. Clone and Enter the Repository
+### Backend setup
 
-```powershell
-git clone <repository-url>
-cd OpsPilot
-```
-
-### 2. Configure the Backend Environment
-
-Create `backend/.env` from the example:
+From the repository root:
 
 ```powershell
 Copy-Item backend\.env.example backend\.env
-```
-
-Add the provider settings described in [Provider Strategy](#provider-strategy). Configuration is loaded from the repository `.env` first and `backend/.env` second; backend values override root values.
-
-### 3. Install Backend Dependencies
-
-```powershell
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -439,38 +202,71 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. Start the Backend
+Configure `backend/.env`:
 
-Run from `backend/` so the default local SQLite database is created at `backend/opspilot.db`:
+```env
+DATABASE_URL=sqlite:///./opspilot.db
+
+LLM_PROVIDER=groq
+GROQ_API_KEY=your-groq-api-key
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=llama-3.3-70b-versatile
+
+LOCAL_LLM_ENABLED=true
+LOCAL_LLM_BASE_URL=http://localhost:1234/v1
+LOCAL_LLM_API_KEY=lm-studio
+LOCAL_LLM_MODEL=your-loaded-lm-studio-model-id
+
+DEMO_MODE=false
+DEMO_API_KEY=
+MAX_WORKFLOWS_PER_HOUR=20
+
+EMAIL_INGESTION_ENABLED=false
+EMAIL_IMAP_HOST=imap.gmail.com
+EMAIL_IMAP_PORT=993
+EMAIL_USERNAME=
+EMAIL_APP_PASSWORD=
+EMAIL_MARK_AS_READ=false
+
+ALERT_EMAIL_ENABLED=false
+ALERT_EMAIL_FROM=
+ALERT_EMAIL_TO=
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+```
+
+Start FastAPI from `backend/`:
 
 ```powershell
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Useful backend URLs:
+Useful URLs:
 
-- API health: `http://localhost:8000/health`
-- Swagger UI: `http://localhost:8000/docs`
-- OpenAPI JSON: `http://localhost:8000/openapi.json`
+- Health: `http://localhost:8000/health`
+- Swagger: `http://localhost:8000/docs`
+- OpenAPI: `http://localhost:8000/openapi.json`
 
-SQLAlchemy creates missing tables at startup. `ensure_database_schema()` applies the small additive migrations required by existing local SQLite databases.
+### Frontend setup
 
-### 5. Install Frontend Dependencies
-
-Open a second terminal:
+Open another terminal from the repository root:
 
 ```powershell
 cd frontend
 npm install
+Copy-Item .env.example .env.local
 ```
 
-The frontend defaults to `http://localhost:8000`. To override it, create `frontend/.env.local`:
+Configure `frontend/.env.local`:
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_DEMO_API_KEY=
 ```
 
-### 6. Start the Frontend
+When backend demo mode is enabled, `NEXT_PUBLIC_DEMO_API_KEY` must match `DEMO_API_KEY`. Restart or rebuild Next.js after changing public environment variables.
+
+Start the frontend:
 
 ```powershell
 npm run dev
@@ -480,19 +276,26 @@ Open `http://localhost:3000`.
 
 ## Running a Workflow
 
-### Through the UI
+### From the UI
 
 1. Open `http://localhost:3000/workflows/new`.
 2. Enter customer feedback.
-3. Submit the workflow.
-4. Open the run detail page to inspect timeline, planner decision, provider, fallback state, reasoning source, tools, drafts, evaluation, critic output, and approvals.
+3. Select **Run OpsPilot Agent**.
+4. Watch the live run page.
+5. Open run details for the graph, tools, outputs, critic, approvals, and replay.
 
-### Through the API
+Example input:
+
+```text
+A customer made the payment successfully but the subscription is not yet active.
+```
+
+### From the API
+
+With demo mode disabled:
 
 ```powershell
-$body = @{
-  input_text = "A customer made the payment successfully but the subscription is not yet active."
-} | ConvertTo-Json
+$body = @{ input_text = "Customer was charged twice." } | ConvertTo-Json
 
 Invoke-RestMethod `
   -Method Post `
@@ -501,301 +304,340 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-The input must contain at least 10 characters.
+With demo mode enabled:
 
-## API Overview
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:8000/api/v1/workflows/run `
+  -Headers @{ "X-Demo-Api-Key" = "your-demo-key" } `
+  -ContentType "application/json" `
+  -Body $body
+```
 
-All application APIs are prefixed with `/api/v1`.
+## Demo API Protection
+
+Demo mode protects expensive or state-changing public operations while keeping read-only GET endpoints public.
+
+```env
+DEMO_MODE=true
+DEMO_API_KEY=use-a-long-random-value
+MAX_WORKFLOWS_PER_HOUR=20
+```
+
+Protected mutations include workflow creation, email ingestion, benchmark execution, regression execution, workflow replay, approval decisions, and incident-plan execution. Workflow creation is limited by an in-memory hourly rate limiter.
+
+Requests must send:
+
+```http
+X-Demo-Api-Key: your-demo-key
+```
+
+Important: a `NEXT_PUBLIC_*` frontend variable is visible in the browser bundle. The demo key prevents casual or accidental abuse; it is not a substitute for user authentication, authorization, a gateway-level rate limiter, or a server-side proxy.
+
+Check runtime status at:
+
+```text
+GET /api/v1/demo/status
+```
+
+## Docker
+
+Build from the repository root:
+
+```powershell
+docker build -t opspilot-backend ./backend
+```
+
+Run using the complete backend environment file:
+
+```powershell
+docker run --rm --name opspilot-backend `
+  --env-file backend/.env `
+  -p 8000:8000 `
+  opspilot-backend
+```
+
+Docker receives only variables supplied through `--env-file` or `-e`. It does not automatically inherit repository environment files.
+
+### Docker with local SQLite persistence
+
+```powershell
+docker run --rm --name opspilot-backend `
+  --env-file backend/.env `
+  -e DATABASE_URL=sqlite:////data/opspilot.db `
+  -v opspilot-data:/data `
+  -p 8000:8000 `
+  opspilot-backend
+```
+
+Without the named volume, SQLite data stored inside a removed container is lost.
+
+### Docker with LM Studio on the host
+
+`localhost` inside Docker refers to the container. Use Docker's host alias:
+
+```powershell
+docker run --rm --name opspilot-backend `
+  --env-file backend/.env `
+  -e LOCAL_LLM_BASE_URL=http://host.docker.internal:1234/v1 `
+  -p 8000:8000 `
+  opspilot-backend
+```
+
+## Neon PostgreSQL
+
+Create a Neon project and copy its pooled connection string. Use the SQLAlchemy Psycopg 2 scheme:
+
+```env
+DATABASE_URL=postgresql+psycopg2://USER:PASSWORD@YOUR-NEON-POOLER-HOST/neondb?sslmode=require
+```
+
+Keep this value in `backend/.env` locally and in the deployment platform's secret manager in production. Do not commit it.
+
+Run Docker with Neon:
+
+```powershell
+docker run --rm --name opspilot-backend `
+  --env-file backend/.env `
+  -p 8000:8000 `
+  opspilot-backend
+```
+
+No SQLite volume is needed when `DATABASE_URL` points to Neon. On first startup, SQLAlchemy creates missing tables. Existing local SQLite data is not automatically migrated to Neon.
+
+Verify persistence:
+
+1. Start the backend with the Neon URL.
+2. Create a workflow.
+3. Restart the container.
+4. Confirm the workflow remains visible.
+5. In Neon SQL Editor, run:
+
+```sql
+SELECT COUNT(*) FROM workflow_runs;
+```
+
+Production schema evolution should use formal migrations. Automatic additive schema guards are intended only for existing local SQLite databases.
+
+## Deployment
+
+### Render
+
+1. Create a Docker Web Service from the repository.
+2. Set the service root directory to `backend`.
+3. Add `DATABASE_URL`, Groq variables, demo variables, and optional email settings.
+4. Use `/health` as the health-check path.
+5. Render supplies `PORT`; the Docker command reads it automatically.
+
+### Railway
+
+1. Create a service from the repository and set its root directory to `backend`.
+2. Add Neon or Railway PostgreSQL and configure `DATABASE_URL`.
+3. Add Groq, demo, and optional provider/email variables.
+4. Generate a public domain.
+5. Verify `/health` and `/docs`.
+
+### Frontend deployment
+
+Configure:
+
+```env
+NEXT_PUBLIC_API_BASE_URL=https://your-backend.example.com
+NEXT_PUBLIC_DEMO_API_KEY=your-demo-key
+```
+
+Next.js public environment variables are embedded at build time. Rebuild the frontend after changing them. Add the deployed frontend origin to the backend CORS allowlist before production traffic.
+
+## API Reference
+
+All application endpoints use the `/api/v1` prefix.
 
 ### Workflows
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/workflows` | List workflow runs and summarized status |
-| `POST` | `/workflows/run` | Create and execute a customer-feedback workflow |
-| `GET` | `/workflows/{id}` | Retrieve one workflow run |
-| `GET` | `/workflows/{id}/steps` | Retrieve agent-step timeline |
-| `GET` | `/workflows/{id}/tool-calls` | Retrieve provider and tool-call records |
-| `GET` | `/workflows/{id}/memory` | Retrieve related or saved memory |
-| `GET` | `/workflows/{id}/planner` | Retrieve the latest planner decision |
-| `GET` | `/workflows/{id}/critic` | Retrieve the latest critic result |
-| `GET` | `/workflows/{id}/outputs` | Retrieve tickets, replies, summary, and evaluation |
+| `GET` | `/workflows` | List workflow runs |
+| `POST` | `/workflows/run` | Start a workflow |
+| `GET` | `/workflows/{id}` | Get workflow metadata |
+| `GET` | `/workflows/{id}/steps` | Get agent steps |
+| `GET` | `/workflows/{id}/tool-calls` | Get provider/tool calls |
+| `GET` | `/workflows/{id}/agent-executions` | Get dynamic executor traces |
+| `GET` | `/workflows/{id}/memory` | Get related memory |
+| `GET` | `/workflows/{id}/planner` | Get planner decision |
+| `GET` | `/workflows/{id}/critic` | Get critic result |
+| `GET` | `/workflows/{id}/outputs` | Get tickets, replies, summary, and evaluation |
+| `POST` | `/workflows/{id}/replay` | Replay a workflow |
+| `GET` | `/workflows/{id}/replays` | List replay history |
+| `GET` | `/workflows/replays/{replay_id}` | Get one replay and diff |
 
 ### Approvals
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `POST` | `/approvals/approve` | Approve a draft ticket or reply |
-| `POST` | `/approvals/reject` | Reject a draft ticket or reply |
-
-Approval request shape:
-
-```json
-{
-  "workflow_run_id": 1,
-  "item_type": "ticket",
-  "item_id": 1,
-  "reviewer_note": "Reviewed and approved."
-}
-```
-
-### Monitoring
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/monitoring/summary` | Workflow counts, tool success/failure, fallback rate, quality, recovery, and provider breakdown |
-
-### Benchmarks
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/benchmarks/cases` | List benchmark cases |
-| `POST` | `/benchmarks/run` | Run the benchmark suite |
-| `GET` | `/benchmarks/history` | Retrieve benchmark history |
-
-### Email Ingestion
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/email-ingestion/preview` | Preview unread emails without processing |
-| `POST` | `/email-ingestion/run` | Ingest a bounded number of unread emails |
-| `GET` | `/email-ingestion/status` | Inspect background worker status |
+| `GET` | `/approvals/queue` | Pending, approved, and rejected queue |
+| `GET` | `/approvals/stats` | Approval counts |
+| `POST` | `/approvals/approve` | Approve a ticket or reply |
+| `POST` | `/approvals/reject` | Reject a ticket or reply |
+| `POST` | `/approvals/comment` | Add a reviewer comment |
+| `GET` | `/approvals/{id}/comments` | Get approval comments |
 
 ### Incidents
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| `GET` | `/incidents` | List active detected incidents |
-| `GET` | `/incidents/alerts/status` | Inspect incident-alert configuration |
+| `GET` | `/incidents` | List incidents |
+| `GET` | `/incidents/alerts/status` | Inspect alert configuration |
+| `GET` | `/incidents/{id}/response-plan` | Get or create response plan |
+| `POST` | `/incidents/{id}/execute` | Execute allowlisted read-only tools |
+| `GET` | `/incidents/{id}/executions` | List incident execution traces |
 
-## Email Ingestion Configuration
+### Benchmarks
 
-Email ingestion is optional.
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/benchmarks/cases` | List legacy benchmark cases |
+| `POST` | `/benchmarks/run` | Run benchmark suite |
+| `GET` | `/benchmarks/history` | Get benchmark history |
+| `GET` | `/benchmarks/regression-cases` | List deterministic regression cases |
+| `POST` | `/benchmarks/run-regression` | Run regression suite |
+| `GET` | `/benchmarks/regression-history` | Get historical regression runs |
+| `GET` | `/benchmarks/results` | Get case-level regression results |
 
-```env
-EMAIL_INGESTION_ENABLED=false
-EMAIL_IMAP_HOST=imap.gmail.com
-EMAIL_IMAP_PORT=993
-EMAIL_USERNAME=
-EMAIL_APP_PASSWORD=
-EMAIL_MARK_AS_READ=false
-```
+### Monitoring and demo
 
-When enabled, the background email worker starts with the FastAPI application. Use an application-specific password rather than a primary account password.
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/monitoring/summary` | Operational workflow metrics |
+| `GET` | `/monitoring/executive-summary` | Executive control-center summary |
+| `GET` | `/demo/status` | Demo protection status |
 
-## Incident Alert Configuration
+### Email ingestion
 
-Incident email alerts are also optional and disabled by default:
-
-```env
-ALERT_EMAIL_ENABLED=false
-ALERT_EMAIL_FROM=
-ALERT_EMAIL_TO=
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-```
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/email-ingestion/preview` | Preview unread messages |
+| `POST` | `/email-ingestion/run` | Ingest unread messages |
+| `GET` | `/email-ingestion/status` | Get worker status |
 
 ## Frontend Areas
 
-- **Home:** project entry surface.
-- **New Workflow:** submit customer feedback.
-- **Runs:** browse workflow history.
-- **Run Detail:** inspect workflow status, planner decision, provider recovery, planned tools, timeline, generated outputs, evaluation, memory, critic result, and approvals.
-- **Live Run:** focused live workflow status and provider activity.
-- **Monitoring:** workflow health, fallback usage, provider breakdown, and failures.
-- **Incidents:** active incident clusters and recommended actions.
-- **Benchmarks:** benchmark cases, execution, metrics, and history.
-
-The Planner Decision section displays:
-
-- plan type;
-- human-approval requirement;
-- planned tool count;
-- planner provider;
-- fallback usage;
-- reasoning source;
-- reasoning summary;
-- normalized planner tools.
-
-## Persistence
-
-OpsPilot uses SQLAlchemy with SQLite locally and PostgreSQL in production. The main persisted entities include:
-
-- workflow runs;
-- agent steps;
-- tool calls;
-- planner decisions;
-- tickets;
-- customer replies;
-- founder summaries;
-- evaluations;
-- critic results;
-- memory items;
-- approval decisions;
-- incidents;
-- processed emails;
-- benchmark runs;
-- agent execution traces.
-
-The database is configured with `DATABASE_URL`. Local development defaults to SQLite:
-
-```text
-sqlite:///./opspilot.db
-```
-
-Because this path is relative, start the backend from the `backend` directory for consistent database placement.
-
-For production, use PostgreSQL from Neon, Supabase, or another managed Postgres provider:
-
-```env
-DATABASE_URL=postgresql+psycopg2://user:password@host/dbname
-```
-
-SQLite retains its local thread configuration. PostgreSQL uses the standard SQLAlchemy engine configuration with `psycopg2-binary`. Existing SQLite auto-schema guards are intentionally local-only; production schema changes should use formal migrations.
+- `/` — overview dashboard
+- `/dashboard` — executive operations control center
+- `/workflows/new` — workflow launcher
+- `/runs` — workflow history
+- `/runs/live/{id}` — live execution view
+- `/runs/{id}` — complete run details, React Flow trace, outputs, execution, and replay
+- `/approvals` — human approval center
+- `/benchmarks` — benchmark and regression dashboard
+- `/monitoring` — provider and operational health
+- `/incidents` — incident intelligence, plans, and execution traces
 
 ## Testing
 
-Run the regression tests from the repository root:
-
-```powershell
-python -m unittest backend.tests.test_issue_normalization backend.tests.test_planner_heuristics
-```
-
-The normalization suite covers:
-
-- successful payment with inactive subscription;
-- successful payment with disabled subscription;
-- login failure after password reset;
-- dashboard freezing during export;
-- Stripe-to-billing webhook synchronization failure;
-- success-only praise;
-- clarification override for actionable input.
-
-The planner suite covers:
-
-- sensitive actionable billing routing;
-- duplicate charge routing;
-- performance routing without unnecessary approval;
-- authentication routing with approval.
-
-Run all backend tests discoverable by `unittest`:
+Run the backend test suite from the repository root with an active Python environment:
 
 ```powershell
 python -m unittest discover -s backend/tests -p "test_*.py"
 ```
 
-Build the frontend:
+Important deterministic suites cover:
+
+- issue normalization and priority policy
+- planner heuristics and safety validation
+- critic policy
+- dynamic tool execution
+- incident response planning and execution
+- workflow replay comparison
+- benchmark evaluation
+- demo guard authentication and rate limiting
+
+Validate the frontend:
 
 ```powershell
 cd frontend
+npx tsc --noEmit
 npm run build
 ```
 
-## Planner Debug Script
+## Production Smoke Test
 
-Use the direct planner script to inspect provider output, parsing, validation, and fallback without running a complete workflow:
+1. Check `GET /health`.
+2. Check `GET /api/v1/demo/status`.
+3. Create a workflow using the demo header.
+4. Confirm intent, planner, tool calls, agent executions, outputs, evaluation, and critic appear.
+5. Confirm sensitive ticket/reply outputs appear in the approval queue.
+6. Replay the workflow and inspect the diff.
+7. Execute a regression run and inspect accuracy metrics.
+8. Open an incident, inspect its response plan, and execute read-only tools.
+9. Restart the backend and confirm workflow history persists in Neon.
 
-```powershell
-cd backend
-python debug_llm_planner.py
+## Troubleshooting
+
+### `X-Demo-Api-Key header is required`
+
+- Confirm backend `DEMO_MODE` and `DEMO_API_KEY`.
+- Confirm frontend `NEXT_PUBLIC_DEMO_API_KEY` matches.
+- Restart the frontend after changing `.env.local`.
+- Recreate Docker containers after changing `backend/.env`.
+
+### `GROQ_API_KEY is not configured`
+
+Docker does not automatically load host `.env` files. Confirm the file passed to `--env-file` contains a non-empty `GROQ_API_KEY`, then recreate the container.
+
+### LM Studio works on the host but not in Docker
+
+Use:
+
+```env
+LOCAL_LLM_BASE_URL=http://host.docker.internal:1234/v1
 ```
 
-The script calls both `generate_llm_plan()` and `plan_next_actions()` with a representative context.
+Ensure LM Studio has a model loaded and its API server is running.
 
-## Monitoring and Troubleshooting
+### Run details return 404 after replacing a container
 
-### Planner Always Uses Deterministic Fallback
+The old workflow was stored in ephemeral container SQLite. Use Neon or mount a persistent SQLite volume. Missing run-detail records render as not found rather than crashing the frontend.
 
-Check backend logs for:
+### Neon connection failure
 
-- selected provider;
-- raw provider response;
-- JSON parse errors;
-- validation failure reason;
-- fallback reason.
+- Confirm the full connection URL is present in the container.
+- Use `postgresql+psycopg2://`.
+- Preserve `sslmode=require`.
+- URL-encode special characters in manually created passwords.
+- Confirm `psycopg2-binary` is installed.
 
-Common causes:
+### Planner always falls back
 
-- `GROQ_API_KEY` is missing;
-- `LOCAL_LLM_ENABLED` is false;
-- LM Studio is not running;
-- `LOCAL_LLM_MODEL` does not match the loaded model ID;
-- Groq or the local model returned an unknown tool or invalid plan type;
-- the LLM attempted to bypass required human approval.
+Inspect backend logs for provider selection, validation errors, and fallback reasons. Confirm Groq credentials, LM Studio availability, loaded model ID, and tool names.
 
-### LM Studio Connection Failure
+### Frontend cannot reach the backend
 
-Confirm:
+Confirm `NEXT_PUBLIC_API_BASE_URL`, backend port exposure, CORS configuration, and whether the frontend was rebuilt after environment changes.
 
-1. LM Studio has a model loaded.
-2. Its local server is running.
-3. The endpoint matches `LOCAL_LLM_BASE_URL`.
-4. The model ID matches `LOCAL_LLM_MODEL`.
-5. `LOCAL_LLM_ENABLED=true`.
+## Safety and Limitations
 
-### Actionable Issue Goes to Clarification
+- Customer replies and tickets are drafts, not direct external actions.
+- Incident response execution is read-only in v1.
+- Incident status is not changed automatically.
+- Email/alert sending remains opt-in.
+- Replay is observational, not exactly deterministic.
+- In-memory demo rate limiting resets on process restart and is per backend process.
+- A browser-visible demo key is not real user authentication.
+- PostgreSQL schema evolution needs formal migrations before frequent production changes.
+- Multi-user authentication, tenant isolation, and role-based authorization are not yet implemented.
+- Real Jira/helpdesk, Slack, and PagerDuty delivery are not yet implemented.
 
-Inspect issue-normalizer logs first. The normalizer should create or normalize a concrete issue and set `requires_clarification=false`. Then inspect planner logs to confirm whether an LLM clarification plan was rejected or deterministic fallback was activated.
+## Recommended Next Steps
 
-### Frontend Cannot Reach Backend
-
-Confirm:
-
-- FastAPI is running on port `8000`;
-- Next.js is running on port `3000`;
-- `NEXT_PUBLIC_API_BASE_URL` is correct;
-- requests originate from `localhost:3000` or `127.0.0.1:3000`, which are enabled by backend CORS.
-
-### Database Appears Empty or Duplicated
-
-Ensure the backend is always started from the same directory. The SQLite path is relative to the process working directory.
-
-## Current Scope and Limitations
-
-Implemented:
-
-- customer-feedback workflow intent routing;
-- structured issue extraction;
-- deterministic issue normalization and taxonomy validation;
-- hybrid Groq/LM Studio planner;
-- deterministic planner validation and fallback;
-- memory search and persistence;
-- ticket and reply draft generation;
-- evaluation and deterministic critic;
-- founder summary generation;
-- human approval endpoints;
-- provider and fallback monitoring;
-- incident clustering and optional alerts;
-- optional IMAP email ingestion;
-- benchmark cases, execution, and history;
-- workflow timeline and run-detail UI.
-
-Not currently implemented as production integrations:
-
-- real Jira or helpdesk ticket creation;
-- automatic customer email delivery;
-- Slack or PagerDuty delivery;
-- multi-user authentication and authorization;
-- organization-level tenant isolation;
-- production database migrations;
-- production secrets management;
-- billing or payment processing;
-- unrestricted autonomous tool execution.
-
-## Roadmap
-
-Potential next steps:
-
-- semantic memory retrieval and stronger relevance scoring;
-- formal PostgreSQL migration tooling, backups, and restore operations;
-- authenticated reviewer accounts and audit trails;
-- real Jira/helpdesk integrations behind approval gates;
-- richer incident clustering and escalation policies;
-- provider cost, token, and latency accounting;
-- additional workflow templates;
-- expanded benchmark datasets for normalization and planner safety;
-- configurable taxonomies per organization;
-- deployment, container, and CI/CD configuration.
+1. Complete Neon production verification.
+2. Add Alembic database migrations.
+3. Add configurable production CORS origins.
+4. Replace browser-visible demo-key access with authenticated server-side sessions or a backend-for-frontend proxy.
+5. Add gateway/distributed rate limiting.
+6. Add CI for backend tests, frontend type checking, and Docker builds.
+7. Add database backups and restore testing.
+8. Add provider cost, token, and latency accounting.
 
 ## License
 

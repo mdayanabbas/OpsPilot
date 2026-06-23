@@ -1,9 +1,12 @@
 .env
+.env.local
+*.env.local
 base/
 __pycache__/
 *.pyc
 node_modules/
 .next/
+*.tsbuildinfo
 uploads/
 chroma_db/
 *.db

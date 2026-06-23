@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { withDemoApiKey } from "../../lib/api";
 
 type Incident = {
   id: number;
@@ -157,7 +158,7 @@ export default function IncidentsPage() {
     try {
       const executeResponse = await fetch(
         `${API_BASE_URL}/api/v1/incidents/${incidentId}/execute`,
-        { method: "POST" },
+        { method: "POST", headers: withDemoApiKey() },
       );
       if (!executeResponse.ok) {
         throw new Error(`Failed to execute response plan: ${executeResponse.status}`);

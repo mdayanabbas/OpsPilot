@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { withDemoApiKey } from "../../lib/api";
 
 type ApprovalActionsProps = {
   workflowRunId: number;
@@ -23,9 +24,9 @@ export function ApprovalActions({ workflowRunId, itemType, itemId }: ApprovalAct
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/approvals/${decision}`, {
         method: "POST",
-        headers: {
+        headers: withDemoApiKey({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           workflow_run_id: workflowRunId,
           item_type: itemType,

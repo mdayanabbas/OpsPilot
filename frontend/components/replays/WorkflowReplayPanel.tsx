@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { withDemoApiKey } from "../../lib/api";
 
 
 type ReplayChange = {
@@ -67,7 +68,7 @@ export function WorkflowReplayPanel({ workflowRunId }: { workflowRunId: number }
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/workflows/${workflowRunId}/replay`,
-        { method: "POST" },
+        { method: "POST", headers: withDemoApiKey() },
       );
       if (!response.ok) throw new Error(`Replay failed: ${response.status}`);
       const replay = (await response.json()) as WorkflowReplay;

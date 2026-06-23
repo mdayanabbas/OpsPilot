@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { withDemoApiKey } from "../../lib/api";
 
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type ApprovalType = "reply" | "ticket" | "incident_action";
@@ -158,7 +159,7 @@ export default function ApprovalsPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/approvals/${decision}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: withDemoApiKey({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           workflow_run_id: item.workflow_run_id,
           item_type: item.item_type,
