@@ -26,37 +26,9 @@ The project combines LLM-assisted reasoning with deterministic policies. Groq is
 
 ## System Architecture
 
-```text
-Customer input
-    |
-    v
-Intent Router
-    |
-    v
-Issue Extraction
-    |
-    v
-Issue Normalization
-    |
-    v
-Memory Search
-    |
-    v
-Planner
-    |
-    v
-Dynamic Tool Executor
-    |-- Ticket Generation
-    |-- Customer Reply
-    |-- Evaluation
-    |-- Founder Summary
-    |-- Incident Detection
-    v
-Critic Review
-    |
-    v
-Human Approval / Operational Monitoring
-```
+<img width="2080" height="4448" alt="ops" src="https://github.com/user-attachments/assets/eb7a8916-ff70-4dd7-b871-229b9610d865" />
+
+
 
 Every workflow persists its major decisions and outputs so the run can be inspected, replayed, compared, benchmarked, and represented as a trace graph.
 
