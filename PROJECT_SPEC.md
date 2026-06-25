@@ -1,7 +1,7 @@
 # OpsPilot Product and Engineering Specification
 
 - **Product:** OpsPilot
-- **Current release:** Hybrid Planner and Issue Normalization v1
+- **Current release:** Agentic Operations Platform v1
 - **Primary workflow:** Customer Feedback Triage
 - **Document status:** Active specification
 - **Last updated:** June 2026
@@ -60,9 +60,14 @@ OpsPilot SHOULD:
 
 - improve prioritization using memory from previous workflows;
 - detect repeated issue clusters as incidents;
+- plan and execute read-only incident-response steps;
 - produce concise founder-facing summaries;
 - support cloud and local LLM providers through one abstraction;
 - support repeatable benchmark evaluation;
+- support observational workflow replay and output comparison;
+- expose agent execution traces and graph views for debugging;
+- provide a centralized human approval workspace;
+- provide executive operational health summaries;
 - remain usable when all LLM providers are unavailable.
 
 ### 3.3 Non-Goals
@@ -73,6 +78,7 @@ The current release does not provide:
 - automatic sending of customer replies;
 - Slack, PagerDuty, or production incident escalation;
 - unrestricted autonomous tool execution;
+- autonomous external incident escalation;
 - payment processing;
 - multi-tenant organization isolation;
 - multi-user authentication and role-based access control;
@@ -157,6 +163,7 @@ Input
 -> Memory Search
 -> Hybrid Planning
 -> Deterministic Plan Validation
+-> Dynamic Tool Executor
 -> Ticket and Reply Draft Generation
 -> Evaluation
 -> Founder Summary
@@ -635,15 +642,18 @@ In `auto` mode, OpsPilot SHOULD:
 4. mark local success as provider fallback;
 5. raise a provider error if both attempts fail.
 
-## 14. Tool Execution Safety
+## 14. Dynamic Tool Execution Safety
 
 Planner tool validity and dynamic tool executability are separate concepts.
 
-The dynamic executor v1 allowlist contains only:
+The dynamic executor v2 allowlist contains:
 
 - `search_memory`
 - `evaluate_workflow_output`
 - `generate_founder_summary`
+- `detect_incident`
+- `generate_ticket`
+- `generate_customer_reply`
 
 Requirements:
 
@@ -651,8 +661,23 @@ Requirements:
 2. Skipped tools MUST produce an explanatory result rather than execute.
 3. Missing required context MUST cause a skip rather than a partial call.
 4. Tool execution errors MUST be returned as structured errors.
-5. The main workflow MAY call established internal generation stages directly.
-6. OpsPilot MUST NOT autonomously send replies, create external tickets, or trigger external incident actions in v1.
+5. Every planner-selected tool MUST produce an agent execution trace with status `executed`, `skipped`, or `error`.
+6. Ticket and reply generation MAY be performed by the dynamic executor.
+7. If dynamic ticket or reply generation succeeds, the workflow MUST reuse that output rather than generating a duplicate legacy draft.
+8. If dynamic ticket or reply generation fails, the workflow MUST fall back to the existing legacy generation path.
+9. The main workflow MAY call established internal generation stages directly as fallback behavior.
+10. OpsPilot MUST NOT autonomously send replies, create external tickets, or trigger external incident actions.
+11. Incident-response execution MUST remain read-only in the current release.
+
+Dynamic execution traces SHOULD persist:
+
+- workflow run ID;
+- planner decision ID;
+- tool name;
+- status;
+- result summary;
+- error message;
+- creation timestamp.
 
 ## 15. Ticket Draft Requirements
 
@@ -780,11 +805,71 @@ An active incident SHOULD expose:
 - first and last detection timestamps;
 - active status.
 
-Incident response planning MUST require human approval.
+Incident response planning MUST produce a read-only plan containing:
+
+- incident ID;
+- plan type;
+- selected next tools;
+- deterministic reasoning;
+- creation timestamp.
+
+Supported incident response plan types are:
+
+- `billing_incident`;
+- `auth_incident`;
+- `performance_incident`;
+- `general_incident`.
+
+Incident response execution MAY execute only read-only allowlisted tools in the current release:
+
+- `search_memory`;
+- `generate_founder_summary`.
+
+Incident execution traces MUST persist:
+
+- incident ID;
+- response plan ID;
+- tool name;
+- status;
+- result summary;
+- error message;
+- creation timestamp.
+
+Incident response planning MUST require human approval before any future external action.
 
 Incident email alerts MUST remain disabled unless explicitly configured.
 
-## 22. Email Ingestion Requirements
+## 22. Workflow Replay Requirements
+
+OpsPilot SHOULD support observational workflow replay.
+
+Replay v1 is not exact deterministic time travel. It reuses the original input text, runs the current workflow implementation against the current system state, and compares the original run with the replayed run.
+
+Replay records MUST persist:
+
+- source workflow run ID;
+- replay workflow run ID;
+- replay status;
+- diff summary;
+- creation timestamp.
+
+The comparison SHOULD include:
+
+- workflow status;
+- workflow type;
+- confidence;
+- ticket category;
+- ticket priority;
+- ticket title;
+- ticket approval requirement;
+- reply risk level;
+- evaluation quality score;
+- critic status;
+- planner plan type.
+
+A replay diff MUST expose whether the run changed, a list of changed fields, and a human-readable summary.
+
+## 23. Email Ingestion Requirements
 
 Email ingestion is optional and MUST be disabled when `EMAIL_INGESTION_ENABLED=false`.
 
@@ -800,7 +885,7 @@ Configuration errors and IMAP authentication errors MUST return clear API errors
 
 Email credentials MUST NOT appear in API responses or logs.
 
-## 23. Monitoring Requirements
+## 24. Monitoring Requirements
 
 Monitoring MUST expose enough information to distinguish logical tools from providers.
 
@@ -823,7 +908,18 @@ Provider labels SHOULD distinguish:
 - deterministic execution;
 - unknown legacy records.
 
-## 24. Benchmark Requirements
+Executive monitoring SHOULD expose:
+
+- workflow volume and automation rate;
+- human review rate;
+- open and severe incidents;
+- pending and recent approval decisions;
+- latest benchmark health and trend;
+- fallback and critic-warning rates;
+- top operational risks;
+- recent workflows, incidents, approvals, and benchmark runs.
+
+## 25. Benchmark Requirements
 
 Benchmark cases are JSON fixtures under `benchmarks/cases`.
 
@@ -857,11 +953,43 @@ Each benchmark run MUST persist:
 - average quality score;
 - per-case failures and workflow run ID where available.
 
-## 25. API Requirements
+The regression engine MUST evaluate deterministic expectations without using LLMs as judges.
+
+Regression expectations MAY include:
+
+- expected category;
+- expected planner plan type;
+- expected priority;
+- expected approval requirement;
+- expected workflow status;
+- expected critic status.
+
+Regression results MUST compare actual workflow outputs against expectations and persist:
+
+- category match;
+- planner match;
+- priority match;
+- approval match;
+- workflow status match;
+- critic match;
+- total score.
+
+Historical regression runs SHOULD persist:
+
+- suite name;
+- case count;
+- average score;
+- planner accuracy;
+- category accuracy;
+- priority accuracy;
+- critic accuracy;
+- creation timestamp.
+
+## 26. API Requirements
 
 All application endpoints use the `/api/v1` prefix.
 
-### 25.1 Workflow API
+### 26.1 Workflow API
 
 - `GET /workflows`
 - `POST /workflows/run`
@@ -872,52 +1000,77 @@ All application endpoints use the `/api/v1` prefix.
 - `GET /workflows/{workflow_run_id}/planner`
 - `GET /workflows/{workflow_run_id}/critic`
 - `GET /workflows/{workflow_run_id}/outputs`
+- `GET /workflows/{workflow_run_id}/agent-executions`
+- `POST /workflows/{workflow_run_id}/replay`
+- `GET /workflows/{workflow_run_id}/replays`
+- `GET /workflows/replays/{replay_id}`
 
-### 25.2 Approval API
+### 26.2 Approval API
 
 - `POST /approvals/approve`
 - `POST /approvals/reject`
+- `GET /approvals/queue`
+- `GET /approvals/stats`
+- `POST /approvals/comment`
+- `GET /approvals/{approval_id}/comments`
 
-### 25.3 Monitoring API
+### 26.3 Monitoring API
 
 - `GET /monitoring/summary`
+- `GET /monitoring/executive-summary`
 
-### 25.4 Benchmark API
+### 26.4 Benchmark API
 
 - `GET /benchmarks/cases`
 - `POST /benchmarks/run`
 - `GET /benchmarks/history`
+- `GET /benchmarks/regression-cases`
+- `POST /benchmarks/run-regression`
+- `GET /benchmarks/regression-history`
+- `GET /benchmarks/results`
 
-### 25.5 Email API
+### 26.5 Email API
 
 - `GET /email-ingestion/preview`
 - `POST /email-ingestion/run`
 - `GET /email-ingestion/status`
 
-### 25.6 Incident API
+### 26.6 Incident API
 
 - `GET /incidents`
 - `GET /incidents/alerts/status`
+- `GET /incidents/{incident_id}/response-plan`
+- `POST /incidents/{incident_id}/execute`
+- `GET /incidents/{incident_id}/executions`
 
-### 25.7 Health API
+### 26.7 Demo API
+
+- `GET /demo/status`
+
+### 26.8 Health API
 
 - `GET /health`
 
 Existing response fields SHOULD remain backward compatible when additive metadata is introduced.
 
-## 26. Frontend Requirements
+## 27. Frontend Requirements
 
 The frontend MUST provide usable surfaces for:
 
 - submitting a workflow;
 - listing runs;
 - viewing run details;
+- viewing a React Flow agent trace graph;
 - viewing live run state;
 - reviewing generated outputs;
 - approving or rejecting drafts;
+- managing the centralized approval queue;
 - monitoring provider and workflow health;
+- viewing executive operations dashboard metrics;
 - viewing incidents;
+- viewing incident response plans and execution traces;
 - running and inspecting benchmarks.
+- replaying workflows and viewing replay diffs.
 
 The run-detail Planner Decision section MUST display:
 
@@ -932,9 +1085,12 @@ The run-detail Planner Decision section MUST display:
 
 The UI MUST NOT imply that a draft was externally sent or created.
 
-## 27. Persistence Requirements
+## 28. Persistence Requirements
 
-The current implementation uses SQLite through SQLAlchemy.
+The current implementation uses SQLAlchemy and MUST support:
+
+- SQLite for local development;
+- PostgreSQL-compatible databases such as Neon or Supabase for production through `DATABASE_URL`.
 
 Persisted entities include:
 
@@ -953,12 +1109,19 @@ Persisted entities include:
 - processed emails;
 - benchmark runs and case results;
 - agent execution traces.
+- incident response plans;
+- incident execution traces;
+- workflow replay records;
+- benchmark expectations;
+- benchmark regression results;
+- benchmark regression runs;
+- approval comments.
 
 Foreign-key-owned workflow data SHOULD be deleted when the parent workflow is deleted where cascade behavior is defined.
 
 Schema changes in the current prototype MAY use additive startup migration logic. Production deployment SHOULD replace this with formal migrations.
 
-## 28. Security and Privacy Requirements
+## 29. Security and Privacy Requirements
 
 1. API keys, email passwords, and secrets MUST be loaded from environment configuration.
 2. Secrets MUST NOT be returned by application APIs.
@@ -968,9 +1131,23 @@ Schema changes in the current prototype MAY use additive startup migration logic
 6. Customer replies and tickets MUST remain drafts until reviewed.
 7. Sensitive issue categories MUST require human approval.
 8. CORS SHOULD be restricted to configured frontend origins.
-9. Production deployments SHOULD add authentication, authorization, encryption, retention controls, and audit policy.
+9. Demo/public deployments SHOULD protect mutation endpoints with a demo API key.
+10. Demo/public deployments SHOULD rate-limit workflow creation.
+11. Production deployments SHOULD add authentication, authorization, encryption, retention controls, and audit policy.
 
-## 29. Reliability Requirements
+Demo-mode protected mutations include:
+
+- workflow creation;
+- email ingestion;
+- benchmark execution;
+- regression benchmark execution;
+- workflow replay;
+- approval approve/reject decisions;
+- incident response execution.
+
+Read-only GET endpoints SHOULD remain public in demo mode unless a future authentication layer changes this behavior.
+
+## 30. Reliability Requirements
 
 1. Provider failure SHOULD produce a structured fallback rather than an unhandled exception when deterministic behavior exists.
 2. Invalid JSON SHOULD be logged and repaired or rejected safely.
@@ -980,7 +1157,7 @@ Schema changes in the current prototype MAY use additive startup migration logic
 6. Workflow failure MUST be visible through status and error metadata.
 7. Database initialization MUST create missing tables for local development.
 
-## 30. Observability Requirements
+## 31. Observability Requirements
 
 Each tool-call record SHOULD include:
 
@@ -999,7 +1176,7 @@ Agent steps SHOULD provide concise input and output summaries without exposing s
 
 Logs SHOULD be useful for local diagnosis and SHOULD avoid credentials and excessive customer data.
 
-## 31. Performance Requirements
+## 32. Performance Requirements
 
 The prototype does not define a strict production service-level objective.
 
@@ -1012,7 +1189,7 @@ For local use:
 
 Future production versions SHOULD define latency, throughput, availability, and retention SLOs.
 
-## 32. Compatibility Requirements
+## 33. Compatibility Requirements
 
 1. Existing API routes MUST continue to function when normalization and planner metadata are added.
 2. Additive response fields SHOULD have safe defaults for existing database rows.
@@ -1020,9 +1197,9 @@ Future production versions SHOULD define latency, throughput, availability, and 
 4. Frontend provider labels SHOULD tolerate legacy or unknown provider values.
 5. Local development SHOULD work with either Groq or LM Studio configuration.
 
-## 33. Acceptance Criteria
+## 34. Acceptance Criteria
 
-### 33.1 Issue Normalization Acceptance
+### 34.1 Issue Normalization Acceptance
 
 | Input | Expected category | Clarification | Expected behavior |
 | --- | --- | --- | --- |
@@ -1033,7 +1210,7 @@ Future production versions SHOULD define latency, throughput, availability, and 
 | `Webhook sync failed between Stripe and billing system.` | `integration` | `false` | Prefer failing integration over incidental billing terms |
 | `Customer says everything works great.` | no issue | `true` | Do not create ticket or reply drafts |
 
-### 33.2 Planner Acceptance
+### 34.2 Planner Acceptance
 
 | Scenario | Expected plan | Human approval |
 | --- | --- | --- |
@@ -1044,7 +1221,7 @@ Future production versions SHOULD define latency, throughput, availability, and 
 | Confirmed incident | `incident_response` | `true` |
 | Vague non-actionable input | `clarification` | context dependent |
 
-### 33.3 LLM Safety Acceptance
+### 34.3 LLM Safety Acceptance
 
 The planner MUST fall back deterministically when the LLM returns:
 
@@ -1057,21 +1234,22 @@ The planner MUST fall back deterministically when the LLM returns:
 - a plan that bypasses mandatory approval;
 - a plan inconsistent with confirmed incident state.
 
-### 33.4 Provider Acceptance
+### 34.4 Provider Acceptance
 
 - Valid Groq planner output MUST persist `planner_provider=groq` and `used_fallback=false`.
 - Valid primary local output MUST persist `planner_provider=local` and `used_fallback=false`.
 - Valid local output after Groq failure MUST record provider fallback.
 - Deterministic planner fallback MUST persist `planner_provider=deterministic` and `used_fallback=true`.
 
-### 33.5 Draft Safety Acceptance
+### 34.5 Draft Safety Acceptance
 
 - Generated tickets MUST remain internal drafts.
 - Generated replies MUST remain internal drafts.
 - Approval MUST update draft state but MUST NOT send or publish externally.
-- Dynamic execution MUST skip tools outside its executor allowlist.
+- Dynamic execution MUST trace every planner-selected tool.
+- Dynamic execution MUST prevent duplicate ticket and reply drafts.
 
-## 34. Regression Test Requirements
+## 35. Regression Test Requirements
 
 The repository SHOULD maintain automated regression coverage for:
 
@@ -1103,7 +1281,19 @@ cd frontend
 npm run build
 ```
 
-## 35. Configuration Requirements
+## 36. Configuration Requirements
+
+Database configuration MUST support:
+
+```env
+DATABASE_URL=sqlite:///./opspilot.db
+```
+
+Production PostgreSQL deployments MAY use:
+
+```env
+DATABASE_URL=postgresql+psycopg2://user:password@host/dbname
+```
 
 Required provider-related environment variables MAY include:
 
@@ -1134,13 +1324,27 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 ```
 
+Demo/public deployment variables include:
+
+```env
+DEMO_MODE=true
+DEMO_API_KEY=
+MAX_WORKFLOWS_PER_HOUR=20
+```
+
+CORS configuration SHOULD include exact frontend origins:
+
+```env
+CORS_ORIGINS=http://localhost:3000,https://your-frontend.example.com
+```
+
 Backend `.env` values override root `.env` values in the current configuration loader.
 
-## 36. Known Constraints and Technical Debt
+## 37. Known Constraints and Technical Debt
 
 The current codebase has prototype constraints that future work SHOULD address:
 
-- SQLite path depends on backend process working directory;
+- SQLite path depends on backend process working directory when SQLite is used;
 - startup schema updates are additive and not a full migration system;
 - workflow orchestration is route-centered rather than expressed through a complete graph abstraction;
 - latency metrics are not consistently captured from every provider call;
@@ -1150,13 +1354,14 @@ The current codebase has prototype constraints that future work SHOULD address:
 - local provider quality depends on the model loaded in LM Studio;
 - taxonomy classification is deterministic and English-focused;
 - incident and memory behavior require broader production-scale evaluation.
+- demo API key protection is not a replacement for real user authentication.
 
-## 37. Future Roadmap
+## 38. Future Roadmap
 
 Future versions MAY add:
 
 1. Formal workflow graph orchestration.
-2. PostgreSQL and migration tooling.
+2. Formal migration tooling.
 3. Authentication, reviewer roles, and organization isolation.
 4. Semantic memory and configurable retrieval strategies.
 5. Organization-specific issue taxonomies.
@@ -1166,10 +1371,10 @@ Future versions MAY add:
 9. Provider token, cost, latency, and quality analytics.
 10. Expanded benchmark and adversarial safety suites.
 11. Multilingual normalization and reply generation.
-12. Deployment, container, CI, and production observability configuration.
+12. CI and production observability hardening.
 13. Additional operational workflow types.
 
-## 38. Definition of Done
+## 39. Definition of Done
 
 A feature change affecting the workflow is complete only when:
 
@@ -1183,7 +1388,7 @@ A feature change affecting the workflow is complete only when:
 8. Frontend changes pass the production build when applicable.
 9. README setup or usage instructions are updated when operator behavior changes.
 
-## 39. Source of Truth
+## 40. Source of Truth
 
 This document defines intended product behavior and engineering guarantees.
 
